@@ -102,49 +102,39 @@ const cohortAnalysisSchema: Schema = {
 };
 
 class GeminiService {
-  public ai: GoogleGenAI;
+  private ai: GoogleGenAI | undefined;
   private apiKey: string | undefined;
   private liveSession: any = null;
 
-  private getSafeApiKey(): string | undefined {
-    try {
-      // Safe process check for browsers
-      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-        return process.env.API_KEY;
-      }
-      // Fallback for polyfilled environment
-      if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
-        return (window as any).process.env.API_KEY;
-      }
-      return undefined;
-    } catch {
-      return undefined;
+  private resolveApiKey(): string {
+    const viteKey = typeof import.meta !== "undefined" ? (import.meta as any).env?.VITE_GEMINI_API_KEY : undefined;
+    const nodeKey = typeof process !== "undefined" ? process.env?.API_KEY : undefined;
+    const windowKey = typeof window !== "undefined" ? (window as any)?.process?.env?.API_KEY : undefined;
+    const key = viteKey || nodeKey || windowKey;
+
+    if (!key) {
+      throw new Error("Gemini API key is not configured");
     }
+
+    return key;
+  }
+
+  private ensureClient(): GoogleGenAI {
+    if (this.ai && this.apiKey) return this.ai;
+
+    this.apiKey = this.resolveApiKey();
+    this.ai = new GoogleGenAI({ apiKey: this.apiKey });
+    return this.ai;
   }
 
   constructor() {
-    this.apiKey = this.getSafeApiKey();
-
-    // Safeguard: Initialize safely to prevent module crash.
-    // If no key is present initially, we use a placeholder. Methods requiring a key will check again.
-    try {
-      this.ai = new GoogleGenAI({ apiKey: this.apiKey || "dummy_key_for_init" });
-    } catch (e) {
-      console.error("Failed to initialize GoogleGenAI client:", e);
-      // Fallback to avoid crashing app initialization, specific methods will fail if called
-      this.ai = {} as any; 
-    }
+    // Lazy initialization; client created on-demand with validated key.
   }
 
   // --- 0. Dashboard Intelligence ---
 
   public async generateFacilityBriefing(rooms: Room[], logs: GrowLog[]): Promise<FacilityBriefing> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     const recentLogs = logs.slice(0, 5).map(l => ({ type: l.actionType, notes: l.manualNotes }));
     const roomSummaries = rooms.map(r => ({
@@ -165,7 +155,7 @@ class GeminiService {
     `;
 
     try {
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: {
           parts: [{ text: `Telemetry: ${JSON.stringify(roomSummaries)}. Recent Activity: ${JSON.stringify(recentLogs)}. Generate Briefing.` }]
@@ -193,12 +183,7 @@ class GeminiService {
   // --- 0.5 Research Intelligence ---
 
   public async generateCohortAnalysis(logs: GrowLog[]): Promise<CohortAnalysis> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-        this.apiKey = key;
-        this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     // Prepare data (limit to last 20 significant logs to save context window)
     const analysisSet = logs.slice(0, 20).map(l => ({
@@ -218,7 +203,7 @@ class GeminiService {
     `;
 
     try {
-        const response = await this.ai.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: {
                 parts: [{ text: `Log Dataset: ${JSON.stringify(analysisSet)}. Analyze this cohort.` }]
@@ -242,20 +227,13 @@ class GeminiService {
   // --- 1. Core Analysis (gemini-3-pro-preview) ---
   
   public async analyzePlantImage(
-    base64Image: string, 
-    context: GrowSetup, 
+    base64Image: string,
+    context: GrowSetup,
     previousDiagnosis?: AiDiagnosis,
     envData?: EnvironmentReading,
     breederDays?: number
   ): Promise<AiDiagnosis> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    
-    // Re-init with correct key if it was missing during constructor
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     const contextAwareSystemInstruction = `
     ${PHYTOPATHOLOGIST_INSTRUCTION}
@@ -283,7 +261,7 @@ class GeminiService {
     const cleanBase64 = base64Image.includes('base64,') ? base64Image.split('base64,')[1] : base64Image;
 
     try {
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: {
           parts: [
@@ -319,10 +297,9 @@ class GeminiService {
   }
 
   // --- 2. Voice Log Processing (Upgraded to Gemini 3 Pro) ---
-  
+
   public async processVoiceLog(audioBase64: string): Promise<Partial<GrowLog>> {
-     const key = this.getSafeApiKey();
-     if (!key) throw new Error("API Key missing");
+     const ai = this.ensureClient();
 
      const systemPrompt = `
      You are a Voice Logging Assistant. Transcribe and categorize.
@@ -330,7 +307,7 @@ class GeminiService {
      `;
 
      try {
-        const response = await this.ai.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: {
                 parts: [
@@ -359,19 +336,14 @@ class GeminiService {
   // --- 3. Chat (Grounded & Multimodal - Gemini 3 Pro) ---
 
   public async chatStream(
-    history: ChatMessage[], 
-    newMessage: string, 
+    history: ChatMessage[],
+    newMessage: string,
     attachment: string | null,
     context: ChatContext,
     onChunk: (text: string, grounding?: any) => void,
     onToolCall?: (payload: Partial<GrowLog>) => void
   ) {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     const modelName = 'gemini-3-pro-preview'; 
     
@@ -440,7 +412,7 @@ class GeminiService {
        newParts.push({ text: newMessage });
     }
 
-    const chat = this.ai.chats.create({
+    const chat = ai.chats.create({
       model: modelName,
       config: { 
         systemInstruction: systemPrompt,
@@ -496,15 +468,10 @@ class GeminiService {
     onError?: (err: any) => void,
     onClose?: () => void
   ): Promise<void> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     try {
-        this.liveSession = await this.ai.live.connect({
+        this.liveSession = await ai.live.connect({
           model: 'gemini-2.5-flash-native-audio-preview-09-2025',
           callbacks: {
             onopen: () => console.log("AR Session Connected"),
@@ -567,19 +534,17 @@ class GeminiService {
 
   // --- 5. Veo Video Generation ---
   public async generateGrowthSimulation(image: string): Promise<string> {
-    const key = this.getSafeApiKey();
-    // For Veo, we need the user's selected key specifically
-    const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
-    if (!hasKey) {
-        await (window as any).aistudio?.openSelectKey();
-    }
-    
-    // Re-fetch key in case it was just set by openSelectKey
-    // Note: getSafeApiKey retrieves from process.env, which should be updated by the environment
-    const refreshedKey = this.getSafeApiKey();
-    if (!refreshedKey) throw new Error("API Key could not be retrieved even after selection.");
+    const ai = this.ensureClient();
 
-    const veoAi = new GoogleGenAI({ apiKey: refreshedKey });
+    const aiStudio = typeof window !== 'undefined' ? (window as any).aistudio : undefined;
+    if (aiStudio) {
+      const hasKey = await aiStudio.hasSelectedApiKey();
+      if (!hasKey) {
+        await aiStudio.openSelectKey();
+      }
+    }
+
+    const veoAi = ai;
     
     let operation = await veoAi.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
@@ -603,8 +568,9 @@ class GeminiService {
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) throw new Error("Video generation failed");
 
-    // Use the correctly retrieved key
-    const response = await fetch(`${downloadLink}&key=${refreshedKey}`);
+    const response = await fetch(downloadLink, {
+      headers: { Authorization: `Bearer ${this.apiKey}` }
+    });
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   }
