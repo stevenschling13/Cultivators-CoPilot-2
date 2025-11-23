@@ -370,12 +370,22 @@ class GeminiService {
   public async generateGrowthSimulation(image: string): Promise<string> {
     if (!this.apiKey) throw new Error("API Key missing");
 
+    const aiStudio = typeof window !== 'undefined' ? (window as any).aistudio : undefined;
+
+    if (!aiStudio) {
+      throw new Error("AI Studio bridge unavailable. Open this experience from AI Studio to run simulations.");
+    }
+
+    if (typeof aiStudio.hasSelectedApiKey !== 'function' || typeof aiStudio.openSelectKey !== 'function') {
+      throw new Error("AI Studio bridge is missing required capabilities for simulation.");
+    }
+
     // Check Key Selection (Mandatory for Veo)
-    const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
+    const hasKey = await aiStudio.hasSelectedApiKey();
     if (!hasKey) {
-        await (window as any).aistudio?.openSelectKey();
+        await aiStudio.openSelectKey();
         // Re-check
-        const hasKeyAfter = await (window as any).aistudio?.hasSelectedApiKey();
+        const hasKeyAfter = await aiStudio.hasSelectedApiKey();
         if(!hasKeyAfter) throw new Error("Paid API Key required for Veo simulation.");
     }
 

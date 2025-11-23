@@ -9,9 +9,10 @@ interface AnalysisResultModalProps {
   onSave: () => void;
   onDiscard: () => void;
   onSimulate: (img: string) => void;
+  simulationAvailable: boolean;
 }
 
-export const AnalysisResultModal = memo(({ result, log, onSave, onDiscard, onSimulate }: AnalysisResultModalProps) => {
+export const AnalysisResultModal = memo(({ result, log, onSave, onDiscard, onSimulate, simulationAvailable }: AnalysisResultModalProps) => {
   return (
     <div className="fixed inset-0 z-[120] bg-[#050505] flex flex-col animate-slide-up safe-area-top safe-area-bottom">
        <div className="p-6 border-b border-white/10 bg-[#0A0A0A]">
@@ -37,12 +38,15 @@ export const AnalysisResultModal = memo(({ result, log, onSave, onDiscard, onSim
              </div>
           </div>
 
-          <button 
+          <button
+             disabled={!simulationAvailable}
              onClick={() => log.imageUrl && onSimulate(log.imageUrl)}
-             className="w-full py-4 bg-gradient-to-r from-uv-purple/20 to-neon-blue/20 border border-uv-purple/30 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all group"
+             className={`w-full py-4 bg-gradient-to-r from-uv-purple/20 to-neon-blue/20 border border-uv-purple/30 rounded-2xl flex items-center justify-center gap-2 transition-all group ${simulationAvailable ? 'active:scale-95' : 'opacity-50 cursor-not-allowed'}`}
           >
               <Play className="w-5 h-5 text-uv-purple group-hover:text-white transition-colors" />
-              <span className="text-sm font-bold text-white">Simulate Future Growth (Veo)</span>
+              <span className="text-sm font-bold text-white">
+                {simulationAvailable ? 'Simulate Future Growth (Veo)' : 'Simulation requires AI Studio bridge'}
+              </span>
           </button>
 
           <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
