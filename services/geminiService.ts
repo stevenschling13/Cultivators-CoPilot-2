@@ -84,7 +84,11 @@ class GeminiService {
 
   private getSafeApiKey(): string | undefined {
     try {
-      return (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+      // Prioritize existing process.env.API_KEY if available (injected by environment)
+      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+        return process.env.API_KEY;
+      }
+      return undefined;
     } catch {
       return undefined;
     }
@@ -94,12 +98,15 @@ class GeminiService {
     this.apiKey = this.getSafeApiKey();
 
     // Safeguard: Initialize safely to prevent module crash.
+    // We do NOT retry with a second 'new GoogleGenAI' call if the first fails, 
+    // as that causes a recursive crash if the library itself has issues.
     try {
       this.ai = new GoogleGenAI({ apiKey: this.apiKey || "dummy_key_for_init" });
     } catch (e) {
       console.error("Failed to initialize GoogleGenAI client:", e);
-      // Fallback dummy object to satisfy type checker if initialization fails catastrophically
-      this.ai = new GoogleGenAI({ apiKey: "fallback" }); 
+      // We accept that this.ai might be malformed if initialization failed.
+      // Casting to any to avoid typescript errors during this critical failure state.
+      this.ai = {} as any; 
     }
   }
 
@@ -394,6 +401,7 @@ class GeminiService {
     }
     
     // Re-fetch key in case it was just set by openSelectKey
+    // Note: getSafeApiKey retrieves from process.env, which should be updated by the environment
     const refreshedKey = this.getSafeApiKey();
     const veoAi = new GoogleGenAI({ apiKey: refreshedKey || "missing_key" });
     
@@ -419,7 +427,7 @@ class GeminiService {
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) throw new Error("Video generation failed");
 
-    // Use the correctly retrieved key, not process.env directly which might be undefined in browser context
+    // Use the correctly retrieved key
     const response = await fetch(`${downloadLink}&key=${refreshedKey}`);
     const blob = await response.blob();
     return URL.createObjectURL(blob);

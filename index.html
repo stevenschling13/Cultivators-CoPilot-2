@@ -7,6 +7,18 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>Cultivator's Copilot</title>
+    <script>
+      // Safe Polyfill for process
+      if (typeof window.process === 'undefined') {
+        window.process = { env: {} };
+      }
+      if (!window.process.env) {
+        window.process.env = {};
+      }
+      if (!window.process.env.NODE_ENV) {
+        window.process.env.NODE_ENV = 'production';
+      }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
