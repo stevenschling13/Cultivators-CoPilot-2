@@ -89,7 +89,7 @@ export const App = () => {
           dbService.getSettings()
         ]);
         setBatches(b.length > 0 ? b : MOCK_BATCHES);
-        setLogs(l.sort((a, b) => b.timestamp - a.timestamp));
+        setLogs([...l].sort((a, b) => b.timestamp - a.timestamp));
         setSettings(s);
         setRooms(MOCK_ROOMS);
       } catch (e) {
