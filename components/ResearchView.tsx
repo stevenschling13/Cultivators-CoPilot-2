@@ -1,5 +1,4 @@
 
-
 import React, { useMemo, useState } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -41,7 +40,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
                 </div>
                 <span className="font-bold">{typeof p.value === 'number' ? p.value.toFixed(1) : p.value}</span>
              </div>
-             {p.payload.avgConfidence !== undefined && (
+             {p.payload?.avgConfidence !== undefined && (
                  <div className="flex justify-end mt-1">
                     <span className={`text-[9px] px-1.5 py-px rounded font-mono border flex items-center gap-1 ${p.payload.avgConfidence >= 0.85 ? 'bg-neon-green/10 text-neon-green border-neon-green/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}`}>
                         <Sparkles className="w-2 h-2" />

@@ -17,10 +17,6 @@ export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, Err
     error: null
   };
 
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
-
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
