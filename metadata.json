@@ -1,0 +1,9 @@
+{
+  "name": "Cultivator's Copilot",
+  "description": "A professional-grade Cannabis Cultivation Platform utilizing Environmental Intelligence and AI-driven Phytopathology.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
