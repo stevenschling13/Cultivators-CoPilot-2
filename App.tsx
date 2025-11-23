@@ -1,7 +1,8 @@
-import React, { 
-  useState, 
-  useEffect, 
-  useMemo
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback
 } from 'react';
 import { 
   Settings,
@@ -71,24 +72,26 @@ export const App = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisData, setAnalysisData] = useState<{ diagnosis: AiDiagnosis; image: string; thumbnail: string } | null>(null);
 
-  const addToast = (message: string, type: 'success' | 'error' | 'info') => {
+  const addToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
     const id = crypto.randomUUID();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3000);
-  };
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const b = await dbService.getBatches();
+        const [b, l, s] = await Promise.all([
+          dbService.getBatches(),
+          dbService.getLogs(),
+          dbService.getSettings()
+        ]);
         setBatches(b.length > 0 ? b : MOCK_BATCHES);
-        const l = await dbService.getLogs();
         setLogs(l.sort((a, b) => b.timestamp - a.timestamp));
-        const s = await dbService.getSettings();
         setSettings(s);
-        setRooms(MOCK_ROOMS); 
+        setRooms(MOCK_ROOMS);
       } catch (e) {
         console.error("Init failed", e);
         addToast("Initialization Error", 'error');
@@ -107,28 +110,29 @@ export const App = () => {
     });
 
     return () => unsub();
-  }, []);
+  }, [addToast]);
 
   const metrics = useMemo(() => {
     return envReading ? EnvironmentService.processReading(envReading) : { vpd: 1.25, dli: 35, vpdStatus: VpdZone.TRANSPIRATION };
   }, [envReading]);
 
-  const handleCapture = async (file: File) => {
+  const currentBatch = useMemo(() => selectedBatch || batches[0] || MOCK_BATCHES[0], [batches, selectedBatch]);
+
+  const handleCapture = useCallback(async (file: File) => {
     setView('dashboard');
     setAnalyzing(true);
-    
+
     try {
         const processed = await ImageUtils.processImage(file);
-        const batch = selectedBatch || batches[0] || MOCK_BATCHES[0];
-        
+
         const diagnosis = await geminiService.analyzePlantImage(
             processed.full,
             settings,
-            undefined, 
+            undefined,
             envReading || undefined,
-            batch?.breederHarvestDays
+            currentBatch?.breederHarvestDays
         );
-        
+
         setAnalysisData({ diagnosis, image: processed.full, thumbnail: processed.thumbnail });
         Haptic.success();
     } catch (e) {
@@ -138,15 +142,14 @@ export const App = () => {
     } finally {
         setAnalyzing(false);
     }
-  };
+  }, [addToast, currentBatch, envReading, settings]);
 
-  const handleSaveAnalysis = async () => {
-    if (!analysisData) return;
-    const batch = selectedBatch || batches[0] || MOCK_BATCHES[0];
-    
+  const handleSaveAnalysis = useCallback(async () => {
+    if (!analysisData || !currentBatch) return;
+
     const newLog: GrowLog = {
         id: crypto.randomUUID(),
-        plantBatchId: batch.id,
+        plantBatchId: currentBatch.id,
         timestamp: Date.now(),
         imageUrl: analysisData.image,
         thumbnailUrl: analysisData.thumbnail,
@@ -154,43 +157,44 @@ export const App = () => {
         aiDiagnosis: analysisData.diagnosis,
         manualNotes: analysisData.diagnosis.morphologyNotes
     };
-    
+
     await dbService.saveLog(newLog);
     setLogs(prev => [newLog, ...prev]);
     setAnalysisData(null);
     addToast("Diagnosis Saved", "success");
     Haptic.success();
-  };
+  }, [addToast, analysisData, currentBatch]);
 
-  const handleLogProposal = async (proposal: Partial<GrowLog>) => {
-    const batch = selectedBatch || batches[0] || MOCK_BATCHES[0];
+  const handleLogProposal = useCallback(async (proposal: Partial<GrowLog>) => {
+    if (!currentBatch) return;
+
     const newLog: GrowLog = {
         id: crypto.randomUUID(),
-        plantBatchId: batch.id,
+        plantBatchId: currentBatch.id,
         timestamp: Date.now(),
         actionType: proposal.actionType || 'Observation',
         manualNotes: proposal.manualNotes || 'Added via Copilot',
         aiDiagnosis: proposal.aiDiagnosis
     };
-    
+
     await dbService.saveLog(newLog);
     setLogs(prev => [newLog, ...prev]);
     addToast("Log Entry Created via AI", "success");
-  };
+  }, [addToast, currentBatch]);
 
-  const handleUpdateLog = async (updatedLog: GrowLog) => {
+  const handleUpdateLog = useCallback(async (updatedLog: GrowLog) => {
     await dbService.saveLog(updatedLog);
     setLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
     addToast("Log Entry Updated", "success");
-  };
+  }, [addToast]);
 
-  const handleDeleteLog = async (id: string) => {
+  const handleDeleteLog = useCallback(async (id: string) => {
     await dbService.deleteLog(id);
     setLogs(prev => prev.filter(l => l.id !== id));
     addToast("Log Entry Deleted", "info");
-  };
+  }, [addToast]);
 
-  const handleSimulate = async (img: string) => {
+  const handleSimulate = useCallback(async (img: string) => {
     addToast("Initializing Veo Simulation...", "info");
     try {
         const videoUrl = await geminiService.generateGrowthSimulation(img);
@@ -202,18 +206,18 @@ export const App = () => {
     } catch (e) {
         addToast("Simulation Failed: " + (e as Error).message, "error");
     }
-  };
+  }, [addToast]);
 
-  const handleRoomClick = (room: Room) => {
+  const handleRoomClick = useCallback((room: Room) => {
      const batch = batches.find(b => b.id === room.activeBatchId) || batches[0];
      if (batch) {
         setSelectedBatch(batch);
      } else {
         addToast("No Active Batch in Room", "info");
      }
-  };
-  
-  const handleBackup = async (password: string) => {
+  }, [addToast, batches]);
+
+  const handleBackup = useCallback(async (password: string) => {
     try {
       await BackupService.createEncryptedBackup(password);
       addToast("Backup Created & Downloaded", "success");
@@ -223,9 +227,9 @@ export const App = () => {
       addToast("Backup Failed", "error");
       return false;
     }
-  };
+  }, [addToast]);
 
-  const handleRestore = async (password: string, file?: File) => {
+  const handleRestore = useCallback(async (password: string, file?: File) => {
     if (!file) return false;
     try {
        const success = await BackupService.restoreFromBackup(file, password);
@@ -240,7 +244,9 @@ export const App = () => {
        console.error(e);
        return false;
     }
-  };
+  }, [addToast]);
+
+  const selectedBatchLogs = useMemo(() => selectedBatch ? logs.filter(l => l.plantBatchId === selectedBatch.id) : [], [logs, selectedBatch]);
 
   if (loading) return <div className="h-screen bg-black text-white flex items-center justify-center font-mono animate-pulse tracking-widest text-xs">ESTABLISHING UPLINK...</div>;
 
@@ -285,10 +291,10 @@ export const App = () => {
       )}
 
       {selectedBatch && (
-        <BatchDetailModal 
-           batch={selectedBatch} 
+        <BatchDetailModal
+           batch={selectedBatch}
            onClose={() => setSelectedBatch(null)}
-           logs={logs.filter(l => l.plantBatchId === selectedBatch.id)}
+           logs={selectedBatchLogs}
            onDeleteLog={handleDeleteLog}
            onUpdateLog={handleUpdateLog}
         />

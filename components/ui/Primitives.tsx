@@ -1,5 +1,5 @@
 
-import React, { memo, ReactNode } from 'react';
+import React, { memo, ReactNode, useMemo } from 'react';
 import { Haptic } from '../../utils/haptics';
 import { VpdZone } from '../../types';
 import { ChevronRight } from 'lucide-react';
@@ -142,23 +142,27 @@ export const StageProgressBar = ({ current, total, label }: { current: number, t
 
 // --- Trend Sparkline ---
 
-export const TrendSparkline = ({ data }: { data: number[] }) => {
+export const TrendSparkline = memo(({ data }: { data: number[] }) => {
   // Simple SVG sparkline
-  if (!data.length) return null;
-  const max = Math.max(...data, 100);
-  const min = Math.min(...data, 0);
-  const range = max - min || 1;
-  const points = data.map((d, i) => {
-    const x = (i / (data.length - 1)) * 100;
-    const y = 100 - ((d - min) / range) * 100;
-    return `${x},${y}`;
-  }).join(' ');
+  const computedPoints = useMemo(() => {
+    if (!data.length) return '';
+    const max = Math.max(...data, 100);
+    const min = Math.min(...data, 0);
+    const range = max - min || 1;
+    return data.map((d, i) => {
+      const x = (i / (data.length - 1)) * 100;
+      const y = 100 - ((d - min) / range) * 100;
+      return `${x},${y}`;
+    }).join(' ');
+  }, [data]);
+
+  if (!computedPoints) return null;
 
   return (
     <div className="h-8 w-24 opacity-50">
       <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible" preserveAspectRatio="none">
         <polyline
-          points={points}
+          points={computedPoints}
           fill="none"
           stroke="currentColor"
           strokeWidth="4"
@@ -169,7 +173,8 @@ export const TrendSparkline = ({ data }: { data: number[] }) => {
       </svg>
     </div>
   );
-};
+});
+TrendSparkline.displayName = 'TrendSparkline';
 
 // --- Skeletons ---
 
