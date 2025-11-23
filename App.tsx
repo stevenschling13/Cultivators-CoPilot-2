@@ -59,6 +59,7 @@ export const App = () => {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [settings, setSettings] = useState<GrowSetup>(DEFAULT_GROW_SETUP);
+  const [aiStudioBridgeAvailable, setAiStudioBridgeAvailable] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as any).aistudio);
   
   // AI Analysis States
   const [analyzing, setAnalyzing] = useState(false);
@@ -101,6 +102,16 @@ export const App = () => {
     });
 
     return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const checkBridge = () => {
+      setAiStudioBridgeAvailable(typeof window !== 'undefined' && !!(window as any).aistudio);
+    };
+
+    checkBridge();
+    const interval = setInterval(checkBridge, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleCapture = async (file: File) => {
@@ -181,6 +192,11 @@ export const App = () => {
   };
 
   const handleSimulate = async (img: string) => {
+    if (!aiStudioBridgeAvailable) {
+      addToast("Growth simulation requires the AI Studio bridge. Open this app from AI Studio to continue.", "error");
+      return;
+    }
+
     addToast("Initializing Veo Simulation...", "info");
     try {
         const videoUrl = await geminiService.generateGrowthSimulation(img);
@@ -213,12 +229,13 @@ export const App = () => {
       <ProcessingOverlay isProcessing={analyzing} />
       
       {analysisData && (
-        <AnalysisResultModal 
+        <AnalysisResultModal
             result={analysisData.diagnosis}
-            log={{ imageUrl: analysisData.image } as GrowLog} 
+            log={{ imageUrl: analysisData.image } as GrowLog}
             onSave={handleSaveAnalysis}
             onDiscard={() => setAnalysisData(null)}
             onSimulate={handleSimulate}
+            simulationAvailable={aiStudioBridgeAvailable}
         />
       )}
 
