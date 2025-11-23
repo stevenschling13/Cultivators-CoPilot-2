@@ -1,6 +1,6 @@
 import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality } from "@google/genai";
-import { AiDiagnosis, ChatMessage, GrowSetup, GrowLog, EnvironmentReading } from "../types";
-import { PHYTOPATHOLOGIST_INSTRUCTION } from "../constants";
+import { AiDiagnosis, ChatMessage, GrowSetup, GrowLog, EnvironmentReading, Room, FacilityBriefing, CohortAnalysis, ChatContext } from "../types";
+import { PHYTOPATHOLOGIST_INSTRUCTION, FLIP_DATE } from "../constants";
 
 // Tool Definition for AR Overlay
 const updateArOverlayTool: FunctionDeclaration = {
@@ -77,6 +77,30 @@ const plantAnalysisSchema: Schema = {
   required: ["healthScore", "detectedPests", "nutrientDeficiencies", "morphologyNotes", "recommendations", "progressionAnalysis", "harvestPrediction"]
 };
 
+// Schema for Facility Briefing
+const facilityBriefingSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    status: { type: Type.STRING, enum: ['OPTIMAL', 'ATTENTION', 'CRITICAL'] },
+    summary: { type: Type.STRING, description: "A concise, military-style status report (max 2 sentences)." },
+    actionItems: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Top 3 priority tasks based on data." },
+    weatherAlert: { type: Type.STRING, description: "Optional simulated weather impact warning." }
+  },
+  required: ["status", "summary", "actionItems"]
+};
+
+// Schema for Cohort Analysis
+const cohortAnalysisSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    trendSummary: { type: Type.STRING, description: "A summary of health trends over time across the provided logs." },
+    dominantIssue: { type: Type.STRING, description: "The most recurring pest or deficiency, if any." },
+    topPerformingStrain: { type: Type.STRING, description: "If multiple strains are present, which appears healthiest?" },
+    recommendedAction: { type: Type.STRING, description: "A high-level strategic recommendation for the next cycle." }
+  },
+  required: ["trendSummary", "recommendedAction"]
+};
+
 class GeminiService {
   public ai: GoogleGenAI;
   private apiKey: string | undefined;
@@ -84,9 +108,13 @@ class GeminiService {
 
   private getSafeApiKey(): string | undefined {
     try {
-      // Prioritize existing process.env.API_KEY if available (injected by environment)
+      // Safe process check for browsers
       if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
         return process.env.API_KEY;
+      }
+      // Fallback for polyfilled environment
+      if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
+        return (window as any).process.env.API_KEY;
       }
       return undefined;
     } catch {
@@ -98,15 +126,116 @@ class GeminiService {
     this.apiKey = this.getSafeApiKey();
 
     // Safeguard: Initialize safely to prevent module crash.
-    // We do NOT retry with a second 'new GoogleGenAI' call if the first fails, 
-    // as that causes a recursive crash if the library itself has issues.
+    // If no key is present initially, we use a placeholder. Methods requiring a key will check again.
     try {
       this.ai = new GoogleGenAI({ apiKey: this.apiKey || "dummy_key_for_init" });
     } catch (e) {
       console.error("Failed to initialize GoogleGenAI client:", e);
-      // We accept that this.ai might be malformed if initialization failed.
-      // Casting to any to avoid typescript errors during this critical failure state.
+      // Fallback to avoid crashing app initialization, specific methods will fail if called
       this.ai = {} as any; 
+    }
+  }
+
+  // --- 0. Dashboard Intelligence ---
+
+  public async generateFacilityBriefing(rooms: Room[], logs: GrowLog[]): Promise<FacilityBriefing> {
+    const key = this.getSafeApiKey();
+    if (!key) throw new Error("API Key missing");
+    if (!this.apiKey && key) {
+       this.apiKey = key;
+       this.ai = new GoogleGenAI({ apiKey: key });
+    }
+
+    const recentLogs = logs.slice(0, 5).map(l => ({ type: l.actionType, notes: l.manualNotes }));
+    const roomSummaries = rooms.map(r => ({
+      name: r.name,
+      stage: r.stage,
+      day: r.stageDay,
+      vpd: r.metrics.vpd,
+      status: r.metrics.status
+    }));
+
+    const systemPrompt = `
+    You are the 'Commander' of a commercial cannabis facility. 
+    Analyze the provided room telemetry and recent logs.
+    Generate a concise daily briefing.
+    - If VPD is out of range (Optimal: 0.8-1.5), flag it.
+    - If plants are late flower (>Day 50), suggest checking trichomes.
+    - Suggest tasks like 'Defoliate', 'Reservoir Change', 'IPM Spray'.
+    `;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: {
+          parts: [{ text: `Telemetry: ${JSON.stringify(roomSummaries)}. Recent Activity: ${JSON.stringify(recentLogs)}. Generate Briefing.` }]
+        },
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json',
+          responseSchema: facilityBriefingSchema
+        }
+      });
+
+      if (!response.text) throw new Error("No response");
+      return JSON.parse(response.text) as FacilityBriefing;
+
+    } catch (e) {
+      console.error("Briefing Gen Failed", e);
+      return {
+        status: 'OPTIMAL',
+        summary: 'Facility systems nominal. Telemetry within standard deviation.',
+        actionItems: ['Monitor VPD', 'Routine Crop Steering']
+      };
+    }
+  }
+  
+  // --- 0.5 Research Intelligence ---
+
+  public async generateCohortAnalysis(logs: GrowLog[]): Promise<CohortAnalysis> {
+    const key = this.getSafeApiKey();
+    if (!key) throw new Error("API Key missing");
+    if (!this.apiKey && key) {
+        this.apiKey = key;
+        this.ai = new GoogleGenAI({ apiKey: key });
+    }
+
+    // Prepare data (limit to last 20 significant logs to save context window)
+    const analysisSet = logs.slice(0, 20).map(l => ({
+        date: new Date(l.timestamp).toDateString(),
+        health: l.aiDiagnosis?.healthScore,
+        pests: l.aiDiagnosis?.detectedPests,
+        deficiencies: l.aiDiagnosis?.nutrientDeficiencies,
+        notes: l.manualNotes || l.aiDiagnosis?.morphologyNotes
+    }));
+
+    const systemPrompt = `
+    You are a Lead Agronomist analyzing a set of crop logs. 
+    Look for patterns in the provided data.
+    - Are health scores trending up or down?
+    - Is there a recurring pest or deficiency appearing on multiple dates?
+    - Suggest a corrective course of action.
+    `;
+
+    try {
+        const response = await this.ai.models.generateContent({
+            model: 'gemini-3-pro-preview',
+            contents: {
+                parts: [{ text: `Log Dataset: ${JSON.stringify(analysisSet)}. Analyze this cohort.` }]
+            },
+            config: {
+                systemInstruction: systemPrompt,
+                responseMimeType: 'application/json',
+                responseSchema: cohortAnalysisSchema
+            }
+        });
+
+        if (!response.text) throw new Error("No response");
+        return JSON.parse(response.text) as CohortAnalysis;
+
+    } catch (e) {
+        console.error("Cohort Analysis Failed", e);
+        throw e;
     }
   }
 
@@ -119,7 +248,14 @@ class GeminiService {
     envData?: EnvironmentReading,
     breederDays?: number
   ): Promise<AiDiagnosis> {
-    if (!this.apiKey) throw new Error("API Key missing");
+    const key = this.getSafeApiKey();
+    if (!key) throw new Error("API Key missing");
+    
+    // Re-init with correct key if it was missing during constructor
+    if (!this.apiKey && key) {
+       this.apiKey = key;
+       this.ai = new GoogleGenAI({ apiKey: key });
+    }
 
     const contextAwareSystemInstruction = `
     ${PHYTOPATHOLOGIST_INSTRUCTION}
@@ -158,7 +294,8 @@ class GeminiService {
         config: {
           systemInstruction: contextAwareSystemInstruction,
           responseMimeType: 'application/json',
-          responseSchema: plantAnalysisSchema
+          responseSchema: plantAnalysisSchema,
+          thinkingConfig: { thinkingBudget: 32768 }
         }
       });
 
@@ -184,7 +321,8 @@ class GeminiService {
   // --- 2. Voice Log Processing (Upgraded to Gemini 3 Pro) ---
   
   public async processVoiceLog(audioBase64: string): Promise<Partial<GrowLog>> {
-     if (!this.apiKey) throw new Error("API Key missing");
+     const key = this.getSafeApiKey();
+     if (!key) throw new Error("API Key missing");
 
      const systemPrompt = `
      You are a Voice Logging Assistant. Transcribe and categorize.
@@ -224,22 +362,56 @@ class GeminiService {
     history: ChatMessage[], 
     newMessage: string, 
     attachment: string | null,
-    options: { context: GrowSetup },
+    context: ChatContext,
     onChunk: (text: string, grounding?: any) => void,
     onToolCall?: (payload: Partial<GrowLog>) => void
   ) {
-    if (!this.apiKey) throw new Error("API Key missing");
+    const key = this.getSafeApiKey();
+    if (!key) throw new Error("API Key missing");
+    if (!this.apiKey && key) {
+       this.apiKey = key;
+       this.ai = new GoogleGenAI({ apiKey: key });
+    }
+
     const modelName = 'gemini-3-pro-preview'; 
     
-    const systemPrompt = `You are Cultivator's Copilot, an expert Cannabis Consultant powered by Gemini 3 Pro.
-    Context: ${JSON.stringify(options.context)}.
-    Date: ${new Date().toDateString()}.
+    // Construct Real-Time Intelligence Context
+    const batchContext = context.batches.map(b => {
+      const age = Math.floor((Date.now() - b.startDate) / (1000 * 60 * 60 * 24));
+      const daysInFlower = b.currentStage === 'Flowering' 
+         ? Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)) 
+         : 0;
+      return `- [${b.batchTag.toUpperCase()}] ${b.strain}. Age: ${age} days. Stage: ${b.currentStage} (Day ${daysInFlower}). Medium: ${b.soilMix}. Notes: ${b.notes}`;
+    }).join('\n');
+
+    const envContext = context.environment 
+      ? `Current Telemetry: Temp ${context.environment.temperature.toFixed(1)}°F, RH ${context.environment.humidity.toFixed(1)}%, VPD ${context.metrics?.vpd.toFixed(2) || 'N/A'} kPa.`
+      : "Live sensor telemetry offline. Proceed with general assumptions.";
+
+    const logHistory = context.recentLogs.slice(0, 5).map(l => 
+       `[${new Date(l.timestamp).toLocaleDateString()}] ${l.actionType}: ${l.manualNotes}`
+    ).join('\n');
+
+    const systemPrompt = `
+    You are Cultivator's Copilot, an expert Cannabis Consultant (Gemini 3 Pro).
     
-    CAPABILITIES:
-    1. Analyze images of plants for health, stage, and deficiencies.
-    2. Answer cultivation questions using Google Search grounding when necessary.
-    3. If the user shares an update or an image that constitutes a grow event, call the 'proposeLog' tool to create a record.
-    4. ALWAYS call 'proposeLog' if the user uploads a plant photo, populating the healthScore, pests, deficiencies, and recommendations fields based on your visual analysis.
+    ### REAL-TIME FACILITY STATUS
+    ${envContext}
+
+    ### ACTIVE GENETICS & SOIL CONFIGURATION
+    ${batchContext}
+
+    ### RECENT OPERATIONS LOG
+    ${logHistory}
+
+    ### CAPABILITIES
+    1. **Tailored Advice:** Use the specific soil mix (Living Soil vs Salt) for EACH plant when giving advice. Blue is Living Soil (Microbe focused), Green is Hybrid (Salt tolerant).
+    2. **Environment Check:** Compare current VPD to stage targets.
+    3. **Image Analysis:** If provided an image, analyze it for health, pests, and deficiencies.
+    4. **Log Events:** If the user confirms an action (e.g., "I watered Blue"), call the 'proposeLog' tool.
+    5. **Search:** Use Google Search for recent strain info or pest outbreaks.
+    
+    ALWAYS call 'proposeLog' if the user uploads a plant photo, populating the fields based on your visual analysis.
     `;
 
     const contents = history
@@ -279,7 +451,7 @@ class GeminiService {
 
     try {
         const result = await chat.sendMessageStream({ 
-            parts: newParts 
+            message: newParts 
         } as any); 
 
         for await (const chunk of result) {
@@ -324,7 +496,12 @@ class GeminiService {
     onError?: (err: any) => void,
     onClose?: () => void
   ): Promise<void> {
-    if (!this.apiKey) throw new Error("API Key missing");
+    const key = this.getSafeApiKey();
+    if (!key) throw new Error("API Key missing");
+    if (!this.apiKey && key) {
+       this.apiKey = key;
+       this.ai = new GoogleGenAI({ apiKey: key });
+    }
 
     try {
         this.liveSession = await this.ai.live.connect({
@@ -390,20 +567,19 @@ class GeminiService {
 
   // --- 5. Veo Video Generation ---
   public async generateGrowthSimulation(image: string): Promise<string> {
-    const safeKey = this.getSafeApiKey();
-    if (!safeKey) throw new Error("API Key missing");
-
+    const key = this.getSafeApiKey();
+    // For Veo, we need the user's selected key specifically
     const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
     if (!hasKey) {
         await (window as any).aistudio?.openSelectKey();
-        const hasKeyAfter = await (window as any).aistudio?.hasSelectedApiKey();
-        if(!hasKeyAfter) throw new Error("Paid API Key required for Veo simulation.");
     }
     
     // Re-fetch key in case it was just set by openSelectKey
     // Note: getSafeApiKey retrieves from process.env, which should be updated by the environment
     const refreshedKey = this.getSafeApiKey();
-    const veoAi = new GoogleGenAI({ apiKey: refreshedKey || "missing_key" });
+    if (!refreshedKey) throw new Error("API Key could not be retrieved even after selection.");
+
+    const veoAi = new GoogleGenAI({ apiKey: refreshedKey });
     
     let operation = await veoAi.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
   <head>
@@ -8,16 +9,10 @@
     <meta name="theme-color" content="#000000">
     <title>Cultivator's Copilot</title>
     <script>
-      // Safe Polyfill for process
-      if (typeof window.process === 'undefined') {
-        window.process = { env: {} };
-      }
-      if (!window.process.env) {
-        window.process.env = {};
-      }
-      if (!window.process.env.NODE_ENV) {
-        window.process.env.NODE_ENV = 'production';
-      }
+      // Safe Polyfill for process to prevent crashes in libraries using process.env
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+      window.process.env.NODE_ENV = window.process.env.NODE_ENV || 'production';
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -62,6 +57,11 @@
         font-family: 'Inter', sans-serif;
         -webkit-tap-highlight-color: transparent;
         overscroll-behavior-y: none;
+        overflow-x: hidden;
+      }
+      
+      .bg-noise {
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
       }
       
       /* iOS Glassmorphism */
@@ -92,8 +92,31 @@
         100% { top: 100%; opacity: 0.5; }
       }
       @keyframes slide-up {
-        from { transform: translateY(100%) translateX(-50%); opacity: 0; }
-        to { transform: translateY(0) translateX(-50%); opacity: 1; }
+        from { transform: translateY(100%) translateX(0); opacity: 0; }
+        to { transform: translateY(0) translateX(0); opacity: 1; }
+      }
+      @keyframes slide-down {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes shine {
+        from { left: -100%; opacity: 0; }
+        to { left: 200%; opacity: 1; }
+      }
+
+      .animate-slide-up { animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+      .animate-slide-down { animation: slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+      .animate-fade-in { animation: fade-in 0.3s ease-out; }
+      .animate-scan { animation: scan 3s linear infinite; }
+      .group:hover .animate-shine { animation: shine 1.5s ease-in-out forwards; }
+      
+      .mask-image-gradient {
+        mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+        -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
       }
     </style>
   <script type="importmap">
@@ -102,17 +125,17 @@
     "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
     "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
     "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
-    "idb": "https://cdn.jsdelivr.net/npm/idb@8.0.0/+esm"
+    "idb": "https://cdn.jsdelivr.net/npm/idb@8.0.0/+esm",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
   }
 }
 </script>
 </head>
-  <body>
+  <body class="bg-noise">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   </body>

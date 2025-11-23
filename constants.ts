@@ -1,7 +1,6 @@
 
 import { GrowSetup, PlantBatch, Room, AlertLevel } from "./types";
 
-// 2025 Best Practice: Define the output schema within the prompt for the model to follow strictly.
 export const AI_RESPONSE_SCHEMA = {
   healthScore: "number (0-100)",
   detectedPests: "array of strings (specific pest names or 'None')",
@@ -17,8 +16,8 @@ You are an Expert Cannabis Agronomist and Plant Pathologist (Gemini 3 Pro Editio
 
 ### PROTOCOL: CONTEXT-AWARE DIAGNOSTICS
 You must adapt your analysis based on the specific grow medium and lights provided in the user's configuration.
-- **Living Soil Context:** Prioritize microbial health. Ignore pH unless <5.5. Flag "fading" as natural senescence in late flower.
-- **Salt/Hydro Context:** Prioritize EC/PPM burn signs and exact pH fluctuations.
+- **Living Soil Context (BLUE):** Prioritize microbial health. Ignore pH unless <5.5. Flag "fading" as natural senescence in late flower.
+- **Salt/Hybrid Context (GREEN):** Prioritize EC/PPM burn signs, Mg deficiencies (common in FFOF mid-flower), and exact pH fluctuations.
 
 ### THE VERDANT SCALE (2025 Standard)
 **95-100 (Pristine):** Perfect genetic expression.
@@ -28,10 +27,10 @@ You must adapt your analysis based on the specific grow medium and lights provid
 **<60 (Critical):** Necrosis, systemic infection, or failure.
 
 ### LEAF SURFACE ANALYSIS CHECKLIST
-1. **Mobile Nutrients (N, P, K, Mg):** Check lower leaves for translocation.
+1. **Mobile Nutrients (N, P, K, Mg):** Check lower leaves for translocation (common in Green pheno).
 2. **Immobile Nutrients (Ca, Fe, S):** Check new growth for lockouts.
 3. **Pest Vectors:** Scan for stippling (mites), thrips silvering, or fungus gnat larvae issues in soil.
-4. **Morphology:** Evaluate Internodal Spacing vs Light Intensity.
+4. **Morphology:** Evaluate Internodal Spacing vs Light Intensity (Sunmaster 670W).
 
 ### RESPONSE REQUIREMENTS
 - **Recency:** Prioritize 2024-2025 crop steering research.
@@ -39,11 +38,11 @@ You must adapt your analysis based on the specific grow medium and lights provid
 `;
 
 export const DEFAULT_GROW_SETUP: GrowSetup = {
-  environmentType: 'Garage (Insulated) - 5x5 Tent',
-  lightingType: 'Sunmaster 670W + 2x SF1000',
-  medium: 'BuildASoil / FFOF Mixes',
-  nutrients: 'Advanced Nutrients pH Perfect',
-  targetVpd: '1.2 - 1.5 kPa (Late Flower)',
+  environmentType: 'Insulated Garage - 5x5 Tent (Maple Plain, MN)',
+  lightingType: 'Sunmaster 670W (Center) + 2x SF1000 (Sides) - ~870W Total',
+  medium: 'BuildASoil UCCR (Blue) / UCCR+FFOF (Green)',
+  nutrients: 'Advanced Nutrients pH Perfect + Big Bud/Bud Candy',
+  targetVpd: '1.2 - 1.5 kPa',
   vpdNotifications: true
 };
 
@@ -57,93 +56,47 @@ export const STAGE_INFO: Record<string, { temp: string, rh: string, vpd: string,
 
 export const MOCK_BATCHES: PlantBatch[] = [
   {
-    id: 'batch-001',
-    batchTag: 'Runtz-24A',
-    strain: 'Runtz Muffin',
-    soilMix: 'Living Soil',
-    startDate: Date.now() - 45 * 24 * 60 * 60 * 1000, // 45 days ago
+    id: 'blue-pheno',
+    batchTag: 'BLUE',
+    strain: "The Krux × Grandpa's Cookies #6",
+    soilMix: '100% BuildASoil UCCR (Living Soil)',
+    startDate: new Date('2025-08-02').getTime(),
     currentStage: 'Flowering',
-    notes: 'Looking vigorous, heavy stretch.',
-    projectedHarvestDate: Date.now() + 35 * 24 * 60 * 60 * 1000,
+    notes: 'Blue Pheno. Slow start, stout/bushy structure. 8-top manifold. Dark green foliage. Showing mild N fade (expected).',
+    projectedHarvestDate: new Date('2025-11-23').getTime(), // based on timeline
     breederHarvestDays: 63
   },
   {
-    id: 'batch-002',
-    batchTag: 'Mac1-24B',
-    strain: 'MAC 1',
-    soilMix: 'Coco Coir',
-    startDate: Date.now() - 15 * 24 * 60 * 60 * 1000, // 15 days ago
-    currentStage: 'Vegetative',
-    notes: 'Slow starter, increasing EC.',
-    projectedHarvestDate: Date.now() + 70 * 24 * 60 * 60 * 1000,
-    breederHarvestDays: 65
+    id: 'green-pheno',
+    batchTag: 'GREEN',
+    strain: "The Krux × Grandpa's Cookies #6",
+    soilMix: '50% UCCR / 50% FFOF',
+    startDate: new Date('2025-08-02').getTime(),
+    currentStage: 'Flowering',
+    notes: 'Green Pheno. Vigorous vertical growth. Needs heavier feed/Cal-Mag. Mild Mg deficiency visible mid-flower.',
+    projectedHarvestDate: new Date('2025-11-23').getTime(),
+    breederHarvestDays: 63
   }
 ];
 
-// Simulated date when the active batch was flipped to 12/12 (e.g. 24 days ago)
-export const FLIP_DATE = new Date(Date.now() - (24 * 24 * 60 * 60 * 1000)).toISOString();
+// Flip Date: Oct 2, 2025
+export const FLIP_DATE = '2025-10-02T00:00:00.000Z';
 
 export const MOCK_ROOMS: Room[] = [
   {
-    id: 'room-01',
-    name: 'Flower Alpha',
+    id: 'tent-main',
+    name: 'Garage 5x5 (Blue/Green)',
     stage: 'Flowering' as any,
-    stageDay: 24,
-    activeBatchId: 'batch-001',
+    stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
+    activeBatchId: 'blue-pheno',
     metrics: {
-      temp: 78.5,
-      rh: 52.0,
-      vpd: 1.4,
-      co2: 1150,
+      temp: 71.3,
+      rh: 48.9,
+      vpd: 1.26,
+      co2: 450,
       lastUpdated: Date.now(),
       status: 'NOMINAL',
-      history: [1.2, 1.3, 1.35, 1.4, 1.4, 1.3, 1.3, 1.4, 1.4, 1.45, 1.4, 1.4]
-    }
-  },
-  {
-    id: 'room-02',
-    name: 'Veg Beta',
-    stage: 'Vegetative' as any,
-    stageDay: 14,
-    activeBatchId: 'batch-002',
-    metrics: {
-      temp: 82.1,
-      rh: 65.0,
-      vpd: 0.95,
-      co2: 420,
-      lastUpdated: Date.now(),
-      status: 'NOMINAL',
-      history: [0.8, 0.85, 0.9, 0.9, 0.95, 0.95, 0.92, 0.95]
-    }
-  },
-  {
-    id: 'room-03',
-    name: 'Dry Room A',
-    stage: 'Drying' as any,
-    stageDay: 3,
-    metrics: {
-      temp: 62.0,
-      rh: 68.5,
-      vpd: 0.6,
-      co2: 400,
-      lastUpdated: Date.now() - 1000 * 60 * 10, // 10 mins ago
-      status: 'WARNING',
-      history: [0.7, 0.7, 0.68, 0.65, 0.62, 0.6, 0.6, 0.6]
-    }
-  },
-  {
-    id: 'room-04',
-    name: 'Prop C',
-    stage: 'Clone' as any,
-    stageDay: 5,
-    metrics: {
-      temp: 75.0,
-      rh: 80.0,
-      vpd: 0.6,
-      co2: 400,
-      lastUpdated: Date.now() - 1000 * 60 * 60 * 2, // 2 hours ago
-      status: 'OFFLINE',
-      history: [0.6, 0.6, 0.6, 0.6]
+      history: [1.1, 1.13, 1.16, 1.29, 1.26, 1.39, 1.26] // Recent weekly VPDs
     }
   }
 ];

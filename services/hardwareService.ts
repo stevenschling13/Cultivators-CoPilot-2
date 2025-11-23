@@ -1,4 +1,5 @@
 
+
 import { SensorDevice, EnvironmentReading, VpdZone } from '../types';
 import { EnvironmentService } from './environmentService';
 
@@ -132,7 +133,7 @@ export class HardwareService {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, { body, icon: '/favicon.ico' });
     } else {
-      console.warn("Notification blocked:", title);
+      console.log("Notification skipped:", title);
     }
   }
 }

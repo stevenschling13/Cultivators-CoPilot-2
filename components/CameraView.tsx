@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { X, Eye, Video, Sliders, Image as ImageIcon } from 'lucide-react';
+import { X, Eye, Video, Sliders, Image as ImageIcon, Scan, Target } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { Haptic } from '../utils/haptics';
 
@@ -7,6 +7,7 @@ interface CameraViewProps {
   onCapture: (file: File) => void;
   onCancel: () => void;
   ghostImage?: string;
+  autoStartAr?: boolean;
 }
 
 // PERFORMANCE: Cap AR analysis resolution. 
@@ -14,7 +15,7 @@ interface CameraViewProps {
 // 480px width is sufficient for pest detection/biomass.
 const AR_ANALYSIS_WIDTH = 480;
 
-export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewProps) => {
+export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr = false }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -52,6 +53,11 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
 
     startCamera();
     
+    // Auto-start AR if requested
+    if (autoStartAr) {
+        setTimeout(() => startArSession(), 800);
+    }
+
     return () => {
       isMounted = false;
       if (arTimeoutRef.current) clearTimeout(arTimeoutRef.current);
@@ -226,45 +232,73 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
           </div>
        )}
        
-       {arMode && arData && (
-          <div className="absolute inset-0 pointer-events-none p-6 pt-16 flex flex-col justify-between z-20">
-             {arData.status === "CONNECTING..." ? (
-                <div className="flex items-center justify-center h-full">
-                   <div className="bg-black/60 backdrop-blur-md border border-neon-green/30 rounded-full px-6 py-2 animate-pulse">
-                      <div className="text-neon-green font-mono text-xs tracking-widest">ESTABLISHING NEURAL LINK...</div>
+       {arMode && (
+          <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
+             {/* Reticle UI */}
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-neon-green/30 rounded-lg">
+                <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-neon-green"></div>
+                <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-neon-green"></div>
+                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-neon-green"></div>
+                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-neon-green"></div>
+                
+                {/* Center Crosshair */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4">
+                   <div className="absolute top-1/2 left-0 right-0 h-px bg-neon-green/50"></div>
+                   <div className="absolute left-1/2 top-0 bottom-0 w-px bg-neon-green/50"></div>
+                </div>
+
+                {/* Scan Line */}
+                <div className="absolute left-0 right-0 h-px bg-neon-green shadow-[0_0_10px_#00ffa3] animate-scan opacity-50"></div>
+             </div>
+
+             {/* Connecting Status */}
+             {(!arData || arData.status === "CONNECTING...") && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-40">
+                   <div className="bg-black/60 backdrop-blur-md border border-neon-green/30 rounded-full px-6 py-2 animate-pulse flex items-center gap-2">
+                      <div className="w-2 h-2 bg-neon-green rounded-full animate-ping"></div>
+                      <div className="text-neon-green font-mono text-xs tracking-widest">INITIALIZING NEURAL LINK...</div>
                    </div>
                 </div>
-             ) : (
-                 <>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-black/40 backdrop-blur-md border border-neon-green/30 rounded-xl p-3 animate-pulse">
+             )}
+             
+             {/* HUD Data Overlay */}
+             {arData && arData.status !== "CONNECTING..." && (
+                <div className="absolute inset-0 p-6 pt-safe-top flex flex-col justify-between">
+                    <div className="flex justify-between items-start pt-16">
+                        <div className="bg-black/60 backdrop-blur-md border-l-2 border-neon-green p-3 rounded-r-xl animate-slide-right">
                            <div className="text-[9px] text-neon-green font-mono mb-1 tracking-widest">COLA COUNT</div>
-                           <div className="text-3xl font-bold text-white">{arData.colaCount || '--'}</div>
+                           <div className="text-3xl font-bold text-white font-mono">{arData.colaCount || '--'}</div>
                         </div>
-                        <div className="bg-black/40 backdrop-blur-md border border-neon-green/30 rounded-xl p-3 animate-pulse">
+                        <div className="bg-black/60 backdrop-blur-md border-r-2 border-neon-green p-3 rounded-l-xl text-right animate-slide-left">
                            <div className="text-[9px] text-neon-green font-mono mb-1 tracking-widest">HEALTH</div>
-                           <div className="text-xl font-bold text-white">{arData.healthStatus || '--'}</div>
+                           <div className="text-xl font-bold text-white font-mono">{arData.healthStatus || '--'}</div>
                         </div>
                     </div>
 
                     {arData.criticalWarning && (
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 text-center">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-32 w-64 text-center">
                              <div className="bg-alert-red/20 backdrop-blur-md border border-alert-red/50 rounded-xl p-4 animate-pulse">
-                                 <div className="text-alert-red font-bold uppercase tracking-widest text-xs mb-1">WARNING</div>
+                                 <div className="flex items-center justify-center gap-2 text-alert-red font-bold uppercase tracking-widest text-xs mb-1">
+                                    <Target className="w-4 h-4"/> WARNING DETECTED
+                                 </div>
                                  <div className="text-white font-bold">{arData.criticalWarning}</div>
                              </div>
                         </div>
                     )}
                     
-                     <div className="mb-20">
-                        <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-3 inline-block animate-pulse">
-                           <div className="text-[9px] text-gray-400 font-mono mb-1 tracking-widest">DENSITY</div>
-                           <div className="text-lg font-bold text-white">{arData.biomassEstimate || '--'}</div>
+                     <div className="mb-24 flex justify-center">
+                        <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-xl p-3 flex gap-4 animate-slide-up">
+                           <div>
+                              <div className="text-[9px] text-gray-400 font-mono mb-1 tracking-widest uppercase">Biomass Density</div>
+                              <div className="text-lg font-bold text-white font-mono">{arData.biomassEstimate || '--'}</div>
+                           </div>
                         </div>
                      </div>
-                 </>
+                </div>
              )}
-             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-neon-green/5 to-transparent animate-scan pointer-events-none -z-10"></div>
+             
+             {/* Background Grid Effect */}
+             <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,163,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,163,0.03)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none -z-10 mask-image-gradient"></div>
           </div>
        )}
        
@@ -308,7 +342,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
               onClick={arMode ? stopArSession : startArSession}
               className={`p-4 rounded-full backdrop-blur active:scale-90 transition-all border ${arMode ? 'bg-neon-green text-black border-neon-green shadow-[0_0_20px_rgba(0,255,163,0.5)]' : 'bg-white/10 text-white border-white/10'}`}
             >
-              {arMode ? <Eye className="w-6 h-6" /> : <Video className="w-6 h-6" />}
+              {arMode ? <Eye className="w-6 h-6" /> : <Scan className="w-6 h-6" />}
             </button>
           </div>
        </div>

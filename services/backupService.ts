@@ -34,12 +34,12 @@ export class BackupService {
     document.body.removeChild(a);
     
     // OPTIMIZATION: Delay revoking URL significantly to allow iOS Safari to capture the download context
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 
   /**
    * Reads an encrypted backup file and restores the database.
-   * WARNING: This overwrites current data.
+   * WARNING: This overwrites/updates current data.
    */
   public static async restoreFromBackup(file: File, password: string): Promise<boolean> {
     try {

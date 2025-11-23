@@ -1,4 +1,5 @@
 
+
 export enum VpdZone {
   DANGER = 'Danger',
   TRANSPIRATION = 'Transpiration (Healthy)',
@@ -69,6 +70,13 @@ export interface Room {
   metrics: RoomMetrics;
 }
 
+export interface FacilityBriefing {
+  status: 'OPTIMAL' | 'ATTENTION' | 'CRITICAL';
+  summary: string;
+  actionItems: string[];
+  weatherAlert?: string;
+}
+
 // ----------------------------
 
 export interface HarvestPrediction {
@@ -104,6 +112,17 @@ export interface GrowLog {
   actionType?: 'Water' | 'Feed' | 'Defoliate' | 'Observation' | 'Other' | 'Pest Control' | 'Training' | 'Flush' | string;
 }
 
+// --- RESEARCH TYPES ---
+
+export interface CohortAnalysis {
+  trendSummary: string;
+  dominantIssue?: string;
+  topPerformingStrain?: string;
+  recommendedAction: string;
+}
+
+// ----------------------
+
 export interface ChatAttachment {
   type: 'image' | 'file';
   url: string; // Base64 or URL
@@ -129,6 +148,14 @@ export interface GrowSetup {
   targetVpd: string;
   vpdNotifications?: boolean;
   lastConnectedDeviceId?: string;
+}
+
+export interface ChatContext {
+  setup: GrowSetup;
+  environment?: EnvironmentReading;
+  batches: PlantBatch[];
+  recentLogs: GrowLog[];
+  metrics?: CalculatedMetrics;
 }
 
 export type AspectRatio = "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
