@@ -85,18 +85,32 @@ class GeminiService {
   private liveSession: any = null;
 
   constructor() {
-    try {
-      this.apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-    } catch (e) {
-      console.warn("Could not access process.env");
-    }
+    this.apiKey = this.resolveApiKey();
 
     if (this.apiKey) {
       this.ai = new GoogleGenAI({ apiKey: this.apiKey });
     } else {
-      console.warn("API_KEY not found in environment variables.");
+      console.warn("VITE_GEMINI_API_KEY not found in environment variables.");
       this.ai = new GoogleGenAI({ apiKey: "" });
     }
+  }
+
+  private resolveApiKey(): string | undefined {
+    try {
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
+        return import.meta.env.VITE_GEMINI_API_KEY;
+      }
+    } catch (e) {
+      console.warn("Could not access import.meta.env", e);
+    }
+
+    return undefined;
+  }
+
+  private requireApiKey(): string {
+    const key = this.apiKey ?? this.resolveApiKey();
+    if (!key) throw new Error("API Key missing");
+    return key;
   }
 
   // --- 1. Core Analysis (gemini-3-pro-preview) ---
@@ -108,7 +122,7 @@ class GeminiService {
     envData?: EnvironmentReading,
     breederDays?: number
   ): Promise<AiDiagnosis> {
-    if (!this.apiKey) throw new Error("API Key missing");
+    this.requireApiKey();
 
     const contextAwareSystemInstruction = `
     ${PHYTOPATHOLOGIST_INSTRUCTION}
@@ -173,9 +187,9 @@ class GeminiService {
   }
 
   // --- 2. Voice Log Processing (Upgraded to Gemini 3 Pro) ---
-  
+
   public async processVoiceLog(audioBase64: string): Promise<Partial<GrowLog>> {
-     if (!this.apiKey) throw new Error("API Key missing");
+     this.requireApiKey();
 
      const systemPrompt = `
      You are a Voice Logging Assistant. Transcribe and categorize.
@@ -212,14 +226,16 @@ class GeminiService {
   // --- 3. Chat (Grounded & Multimodal - Gemini 3 Pro) ---
 
   public async chatStream(
-    history: ChatMessage[], 
-    newMessage: string, 
+    history: ChatMessage[],
+    newMessage: string,
     attachment: string | null,
     options: { context: GrowSetup },
     onChunk: (text: string, grounding?: any) => void,
     onToolCall?: (payload: Partial<GrowLog>) => void
   ) {
-    const modelName = 'gemini-3-pro-preview'; 
+    this.requireApiKey();
+
+    const modelName = 'gemini-3-pro-preview';
     
     const systemPrompt = `You are Cultivator's Copilot, an expert Cannabis Consultant powered by Gemini 3 Pro.
     Context: ${JSON.stringify(options.context)}.
@@ -314,7 +330,7 @@ class GeminiService {
   // --- 4. Live AR Analysis ---
 
   public async startLiveAnalysis(onArUpdate: (data: any) => void): Promise<void> {
-    if (!this.apiKey) throw new Error("API Key missing");
+    this.requireApiKey();
 
     this.liveSession = await this.ai.live.connect({
       model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -368,7 +384,7 @@ class GeminiService {
 
   // --- 5. Veo Video Generation ---
   public async generateGrowthSimulation(image: string): Promise<string> {
-    if (!this.apiKey) throw new Error("API Key missing");
+    const apiKey = this.requireApiKey();
 
     const aiStudio = typeof window !== 'undefined' ? (window as any).aistudio : undefined;
 
@@ -390,7 +406,7 @@ class GeminiService {
     }
 
     // New instance for Veo to pick up the paid key
-    const veoAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const veoAi = new GoogleGenAI({ apiKey });
     
     let operation = await veoAi.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
@@ -415,7 +431,7 @@ class GeminiService {
     if (!downloadLink) throw new Error("Video generation failed");
 
     // Fetch the actual bytes with the key
-    const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+    const response = await fetch(`${downloadLink}&key=${apiKey}`);
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   }
