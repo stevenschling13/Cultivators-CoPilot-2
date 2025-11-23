@@ -101,7 +101,7 @@ export interface GrowLog {
   aiDiagnosis?: AiDiagnosis;
   manualNotes?: string;
   voiceNoteTranscript?: string;
-  actionType?: 'Water' | 'Feed' | 'Defoliate' | 'Observation' | 'Other';
+  actionType?: 'Water' | 'Feed' | 'Defoliate' | 'Observation' | 'Other' | 'Pest Control' | 'Training' | 'Flush' | string;
 }
 
 export interface ChatAttachment {

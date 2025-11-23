@@ -10,6 +10,11 @@ interface CameraViewProps {
   ghostImage?: string;
 }
 
+// PERFORMANCE: Cap AR analysis resolution. 
+// Sending 4K frames to AI is wasteful and blocks the main thread.
+// 480px width is sufficient for pest detection/biomass.
+const AR_ANALYSIS_WIDTH = 480;
+
 export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -17,7 +22,9 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
   const [ghostOpacity, setGhostOpacity] = useState(0.3);
   const [arMode, setArMode] = useState(false);
   const [arData, setArData] = useState<any>(null);
-  const arIntervalRef = useRef<any>(null);
+  
+  // Use Timeout ID for recursive loop instead of Interval
+  const arTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // New Camera Logic: Zoom & Flash
   const [zoom, setZoom] = useState(1);
@@ -48,7 +55,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
     
     return () => {
       isMounted = false;
-      if (arIntervalRef.current) clearInterval(arIntervalRef.current);
+      if (arTimeoutRef.current) clearTimeout(arTimeoutRef.current);
       geminiService.stopLiveAnalysis();
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -81,38 +88,69 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
     }
   };
 
-  const startArSession = async () => {
-    setArMode(true);
-    setArData({ status: "CONNECTING..." });
-    try {
-      await geminiService.startLiveAnalysis((data) => setArData(data));
-      arIntervalRef.current = setInterval(() => {
-         if (videoRef.current && canvasRef.current) {
-            const canvas = canvasRef.current;
-            const video = videoRef.current;
-            if (video.videoWidth === 0) return;
-            canvas.width = video.videoWidth / 4; 
-            canvas.height = video.videoHeight / 4;
-            canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const base64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
-            geminiService.sendLiveFrame(base64);
-         }
-      }, 500);
-    } catch (e) {
-      setArMode(false);
-    }
-  };
-
   const stopArSession = () => {
-    if (arIntervalRef.current) clearInterval(arIntervalRef.current);
+    if (arTimeoutRef.current) clearTimeout(arTimeoutRef.current);
     geminiService.stopLiveAnalysis();
     setArMode(false);
     setArData(null);
   };
 
+  const processArFrame = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    // PERFORMANCE: Use requestAnimationFrame logic via recursive setTimeout
+    // to ensure we don't stack frames if processing is slow.
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (video.videoWidth > 0) {
+        // Downscale for AI Analysis
+        const scale = AR_ANALYSIS_WIDTH / video.videoWidth;
+        canvas.width = AR_ANALYSIS_WIDTH;
+        canvas.height = video.videoHeight * scale;
+        
+        const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+        if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // quality 0.6 is fine for AI
+            const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+            geminiService.sendLiveFrame(base64);
+        }
+    }
+
+    // Schedule next frame ~500ms
+    arTimeoutRef.current = setTimeout(processArFrame, 500);
+  };
+
+  const startArSession = async () => {
+    setArMode(true);
+    setArData({ status: "CONNECTING..." });
+    try {
+      await geminiService.startLiveAnalysis(
+        (data) => setArData(data),
+        (error) => {
+            console.error("AR Session Error", error);
+            Haptic.error();
+            stopArSession();
+        },
+        () => {
+            console.log("AR Session Closed Remotely");
+            stopArSession();
+        }
+      );
+      
+      // Kickoff loop
+      processArFrame();
+
+    } catch (e) {
+      setArMode(false);
+      Haptic.error();
+    }
+  };
+
   const takePhoto = () => {
     if (videoRef.current && canvasRef.current) {
-      // 1. Trigger Flash & Haptics
       setFlashTrigger(true);
       Haptic.tap();
       setTimeout(() => setFlashTrigger(false), 150);
@@ -120,25 +158,22 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
-      // 2. Set canvas to full video resolution
+      // Full Resolution Capture
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
 
       if (ctx) {
-        // 3. Zoom-Aware Crop Logic
-        // Calculate the source area to crop based on zoom level
+        // Zoom-Aware Crop Logic
         const sWidth = video.videoWidth / zoom;
         const sHeight = video.videoHeight / zoom;
-        const sx = (video.videoWidth - sWidth) / 2; // Center crop X
-        const sy = (video.videoHeight - sHeight) / 2; // Center crop Y
+        const sx = (video.videoWidth - sWidth) / 2; 
+        const sy = (video.videoHeight - sHeight) / 2; 
         
-        // Draw the cropped area to fill the entire canvas
         ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
         
         canvas.toBlob(blob => {
           if (blob) {
-            // Slight delay to allow flash animation to be perceived
             setTimeout(() => {
                onCapture(new File([blob], "capture.jpg", { type: "image/jpeg" }));
             }, 200);
@@ -167,6 +202,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
          ref={videoRef} 
          autoPlay 
          playsInline 
+         muted
          className="w-full h-full object-cover transition-transform duration-75 ease-linear will-change-transform"
          style={{ transform: `scale(${zoom})` }}
        />
@@ -185,7 +221,6 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
          </div>
        )}
 
-       {/* Zoom Indicator (Only visible when zoomed) */}
        {zoom > 1.05 && (
           <div className="absolute top-24 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/50 backdrop-blur-md rounded-full border border-white/10 z-40 animate-fade-in">
              <div className="text-neon-green font-mono text-xs font-bold">{zoom.toFixed(1)}x</div>
@@ -194,17 +229,43 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
        
        {arMode && arData && (
           <div className="absolute inset-0 pointer-events-none p-6 pt-16 flex flex-col justify-between z-20">
-             <div className="grid grid-cols-2 gap-4">
-                <div className="bg-black/40 backdrop-blur-md border border-neon-green/30 rounded-xl p-3 animate-pulse">
-                   <div className="text-[9px] text-neon-green font-mono mb-1 tracking-widest">COLA COUNT</div>
-                   <div className="text-3xl font-bold text-white">{arData.colaCount || '--'}</div>
+             {arData.status === "CONNECTING..." ? (
+                <div className="flex items-center justify-center h-full">
+                   <div className="bg-black/60 backdrop-blur-md border border-neon-green/30 rounded-full px-6 py-2 animate-pulse">
+                      <div className="text-neon-green font-mono text-xs tracking-widest">ESTABLISHING NEURAL LINK...</div>
+                   </div>
                 </div>
-                <div className="bg-black/40 backdrop-blur-md border border-neon-green/30 rounded-xl p-3 animate-pulse">
-                   <div className="text-[9px] text-neon-green font-mono mb-1 tracking-widest">BIOMASS</div>
-                   <div className="text-xl font-bold text-white">{arData.biomassEstimate || '--'}</div>
-                </div>
-             </div>
-             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-neon-green/5 to-transparent animate-scan pointer-events-none"></div>
+             ) : (
+                 <>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-black/40 backdrop-blur-md border border-neon-green/30 rounded-xl p-3 animate-pulse">
+                           <div className="text-[9px] text-neon-green font-mono mb-1 tracking-widest">COLA COUNT</div>
+                           <div className="text-3xl font-bold text-white">{arData.colaCount || '--'}</div>
+                        </div>
+                        <div className="bg-black/40 backdrop-blur-md border border-neon-green/30 rounded-xl p-3 animate-pulse">
+                           <div className="text-[9px] text-neon-green font-mono mb-1 tracking-widest">HEALTH</div>
+                           <div className="text-xl font-bold text-white">{arData.healthStatus || '--'}</div>
+                        </div>
+                    </div>
+
+                    {arData.criticalWarning && (
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 text-center">
+                             <div className="bg-alert-red/20 backdrop-blur-md border border-alert-red/50 rounded-xl p-4 animate-pulse">
+                                 <div className="text-alert-red font-bold uppercase tracking-widest text-xs mb-1">WARNING</div>
+                                 <div className="text-white font-bold">{arData.criticalWarning}</div>
+                             </div>
+                        </div>
+                    )}
+                    
+                     <div className="mb-20">
+                        <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-3 inline-block animate-pulse">
+                           <div className="text-[9px] text-gray-400 font-mono mb-1 tracking-widest">DENSITY</div>
+                           <div className="text-lg font-bold text-white">{arData.biomassEstimate || '--'}</div>
+                        </div>
+                     </div>
+                 </>
+             )}
+             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-neon-green/5 to-transparent animate-scan pointer-events-none -z-10"></div>
           </div>
        )}
        

@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { X, Save, Calendar, FileText, Activity } from 'lucide-react';
+import { X, Save, Calendar, FileText, Activity, Edit3 } from 'lucide-react';
 import { GrowLog } from '../../types';
 import { Haptic } from '../../utils/haptics';
 
@@ -10,11 +9,11 @@ interface LogEditModalProps {
   onClose: () => void;
 }
 
-const ACTION_TYPES = ['Observation', 'Water', 'Feed', 'Defoliate', 'Pest Control', 'Training', 'Flush', 'Other'];
+const PREDEFINED_ACTIONS = ['Observation', 'Water', 'Feed', 'Defoliate', 'Pest Control', 'Training', 'Flush'];
 
 export const LogEditModal = ({ log, onSave, onClose }: LogEditModalProps) => {
   const [manualNotes, setManualNotes] = useState(log.manualNotes || '');
-  const [actionType, setActionType] = useState(log.actionType || 'Observation');
+  const [actionType, setActionType] = useState<string>(log.actionType || 'Observation');
   const [timestamp, setTimestamp] = useState(() => {
     // Format timestamp for datetime-local input (YYYY-MM-DDTHH:mm)
     const date = new Date(log.timestamp);
@@ -23,11 +22,13 @@ export const LogEditModal = ({ log, onSave, onClose }: LogEditModalProps) => {
       .slice(0, 16);
   });
 
+  const isCustomAction = !PREDEFINED_ACTIONS.includes(actionType);
+
   const handleSave = () => {
     const updatedLog: GrowLog = {
       ...log,
       manualNotes,
-      actionType: actionType as any,
+      actionType: actionType || 'Observation', // Fallback if empty
       timestamp: new Date(timestamp).getTime()
     };
     Haptic.success();
@@ -54,7 +55,7 @@ export const LogEditModal = ({ log, onSave, onClose }: LogEditModalProps) => {
               <Activity className="w-3 h-3" /> Action Type
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {ACTION_TYPES.map(type => (
+              {PREDEFINED_ACTIONS.map(type => (
                 <button
                   key={type}
                   onClick={() => { Haptic.tap(); setActionType(type); }}
@@ -68,7 +69,36 @@ export const LogEditModal = ({ log, onSave, onClose }: LogEditModalProps) => {
                   {type}
                 </button>
               ))}
+              <button
+                  onClick={() => { 
+                    Haptic.tap(); 
+                    if (!isCustomAction) setActionType(''); // Clear specific type to switch to custom mode
+                  }}
+                  className={`
+                    px-3 py-2 rounded-xl text-xs font-medium transition-all border flex items-center justify-center gap-2
+                    ${isCustomAction
+                      ? 'bg-neon-green/20 border-neon-green text-neon-green' 
+                      : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10'}
+                  `}
+                >
+                  <Edit3 className="w-3 h-3" />
+                  {isCustomAction && actionType && actionType !== 'Other' ? 'Custom' : 'Other'}
+                </button>
             </div>
+            
+            {/* Custom Action Input */}
+            {isCustomAction && (
+              <div className="animate-slide-down pt-1">
+                 <input
+                    type="text"
+                    value={actionType === 'Other' ? '' : actionType}
+                    onChange={(e) => setActionType(e.target.value)}
+                    placeholder="Type custom action (e.g. Transplant)..."
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-neon-green focus:outline-none focus:ring-1 focus:ring-neon-green/50 placeholder-gray-600"
+                    autoFocus
+                 />
+              </div>
+            )}
           </div>
 
           {/* Date & Time */}

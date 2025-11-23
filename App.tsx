@@ -2,6 +2,7 @@
 import React, { 
   useState, 
   useEffect, 
+  useMemo
 } from 'react';
 import { 
   Settings,
@@ -59,11 +60,11 @@ export const App = () => {
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [settings, setSettings] = useState<GrowSetup>(DEFAULT_GROW_SETUP);
-  const [aiStudioBridgeAvailable, setAiStudioBridgeAvailable] = useState<boolean>(() => typeof window !== 'undefined' && !!(window as any).aistudio);
   
   // AI Analysis States
   const [analyzing, setAnalyzing] = useState(false);
-  const [analysisData, setAnalysisData] = useState<{ diagnosis: AiDiagnosis; image: string } | null>(null);
+  // Store both full image and thumbnail to avoid re-processing
+  const [analysisData, setAnalysisData] = useState<{ diagnosis: AiDiagnosis; image: string; thumbnail: string } | null>(null);
 
   const addToast = (message: string, type: 'success' | 'error' | 'info') => {
     const id = crypto.randomUUID();
@@ -79,10 +80,11 @@ export const App = () => {
         const b = await dbService.getBatches();
         setBatches(b.length > 0 ? b : MOCK_BATCHES);
         const l = await dbService.getLogs();
+        // Sorting logic stays here for now, but moving to DB later is better
         setLogs(l.sort((a, b) => b.timestamp - a.timestamp));
         const s = await dbService.getSettings();
         setSettings(s);
-        setRooms(MOCK_ROOMS); // In prod, fetch from DB
+        setRooms(MOCK_ROOMS); 
       } catch (e) {
         console.error("Init failed", e);
         addToast("Initialization Error", 'error');
@@ -92,7 +94,6 @@ export const App = () => {
     };
     load();
 
-    // Hardware simulation subscription
     const unsub = hardwareService.onReading((reading) => {
       setEnvReading(reading);
     });
@@ -104,33 +105,29 @@ export const App = () => {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    const checkBridge = () => {
-      setAiStudioBridgeAvailable(typeof window !== 'undefined' && !!(window as any).aistudio);
-    };
-
-    checkBridge();
-    const interval = setInterval(checkBridge, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  // PERFORMANCE: Memoize metrics to avoid recalculation on every render
+  const metrics = useMemo(() => {
+    return envReading ? EnvironmentService.processReading(envReading) : { vpd: 1.25, dli: 35, vpdStatus: VpdZone.TRANSPIRATION };
+  }, [envReading]);
 
   const handleCapture = async (file: File) => {
     setView('dashboard');
     setAnalyzing(true);
     
     try {
-        const compressed = await ImageUtils.compressImage(file);
+        // PERFORMANCE: Process once, get both assets
+        const processed = await ImageUtils.processImage(file);
         const batch = selectedBatch || batches[0] || MOCK_BATCHES[0];
         
         const diagnosis = await geminiService.analyzePlantImage(
-            compressed,
+            processed.full,
             settings,
             undefined, 
             envReading || undefined,
             batch?.breederHarvestDays
         );
         
-        setAnalysisData({ diagnosis, image: compressed });
+        setAnalysisData({ diagnosis, image: processed.full, thumbnail: processed.thumbnail });
         Haptic.success();
     } catch (e) {
         console.error("Analysis Error:", e);
@@ -150,7 +147,7 @@ export const App = () => {
         plantBatchId: batch.id,
         timestamp: Date.now(),
         imageUrl: analysisData.image,
-        thumbnailUrl: await ImageUtils.createThumbnail(analysisData.image),
+        thumbnailUrl: analysisData.thumbnail, // Pre-computed
         actionType: 'Observation',
         aiDiagnosis: analysisData.diagnosis,
         manualNotes: analysisData.diagnosis.morphologyNotes
@@ -192,11 +189,6 @@ export const App = () => {
   };
 
   const handleSimulate = async (img: string) => {
-    if (!aiStudioBridgeAvailable) {
-      addToast("Growth simulation requires the AI Studio bridge. Open this app from AI Studio to continue.", "error");
-      return;
-    }
-
     addToast("Initializing Veo Simulation...", "info");
     try {
         const videoUrl = await geminiService.generateGrowthSimulation(img);
@@ -219,8 +211,6 @@ export const App = () => {
      }
   };
 
-  const metrics = envReading ? EnvironmentService.processReading(envReading) : { vpd: 1.25, dli: 35, vpdStatus: VpdZone.TRANSPIRATION };
-
   if (loading) return <div className="h-screen bg-black text-white flex items-center justify-center font-mono animate-pulse tracking-widest text-xs">ESTABLISHING UPLINK...</div>;
 
   return (
@@ -229,13 +219,12 @@ export const App = () => {
       <ProcessingOverlay isProcessing={analyzing} />
       
       {analysisData && (
-        <AnalysisResultModal
+        <AnalysisResultModal 
             result={analysisData.diagnosis}
-            log={{ imageUrl: analysisData.image } as GrowLog}
+            log={{ imageUrl: analysisData.image } as GrowLog} 
             onSave={handleSaveAnalysis}
             onDiscard={() => setAnalysisData(null)}
             onSimulate={handleSimulate}
-            simulationAvailable={aiStudioBridgeAvailable}
         />
       )}
 

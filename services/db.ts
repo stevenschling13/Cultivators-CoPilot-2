@@ -11,7 +11,10 @@ interface CultivatorDB extends DBSchema {
   logs: {
     key: string;
     value: GrowLog;
-    indexes: { 'by-batch': string };
+    indexes: { 
+      'by-batch': string,
+      'by-timestamp': number 
+    };
   };
   settings: {
     key: string;
@@ -24,13 +27,23 @@ class DbService {
   private readyPromise: Promise<void>;
 
   constructor() {
-    this.dbPromise = openDB<CultivatorDB>('cultivator-db', 1, {
-      upgrade(db) {
+    this.dbPromise = openDB<CultivatorDB>('cultivator-db', 2, { // Incremented Version
+      upgrade(db, oldVersion, newVersion, transaction) {
         if (!db.objectStoreNames.contains('batches')) db.createObjectStore('batches', { keyPath: 'id' });
+        
+        let logStore;
         if (!db.objectStoreNames.contains('logs')) {
-          const logStore = db.createObjectStore('logs', { keyPath: 'id' });
+          logStore = db.createObjectStore('logs', { keyPath: 'id' });
           logStore.createIndex('by-batch', 'plantBatchId');
+        } else {
+          logStore = transaction.objectStore('logs');
         }
+
+        // Add Timestamp Index for sorting
+        if (!logStore.indexNames.contains('by-timestamp')) {
+          logStore.createIndex('by-timestamp', 'timestamp');
+        }
+
         if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings');
       },
     });
@@ -71,13 +84,15 @@ class DbService {
     if (batchId) {
       return db.getAllFromIndex('logs', 'by-batch', batchId);
     }
+    // Optimization: Use the timestamp index directly if possible, or just getAll
     return db.getAll('logs');
   }
 
   public async getLatestLog(batchId: string): Promise<GrowLog | undefined> {
      await this.readyPromise;
-     const logs = await this.getLogs(batchId);
-     return logs.sort((a, b) => b.timestamp - a.timestamp)[0];
+     const db = await this.dbPromise;
+     const cursor = await db.transaction('logs').store.index('by-batch').openCursor(IDBKeyRange.only(batchId), 'prev');
+     return cursor?.value;
   }
 
   public async saveLog(log: GrowLog) {
