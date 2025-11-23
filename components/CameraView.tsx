@@ -1,4 +1,3 @@
-
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { X, Eye, Video, Sliders, Image as ImageIcon } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
@@ -23,8 +22,8 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage }: CameraViewP
   const [arMode, setArMode] = useState(false);
   const [arData, setArData] = useState<any>(null);
   
-  // Use Timeout ID for recursive loop instead of Interval
-  const arTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Use 'any' to avoid ReturnType<typeof setTimeout> conflicts between Node and Browser types
+  const arTimeoutRef = useRef<any>(null);
 
   // New Camera Logic: Zoom & Flash
   const [zoom, setZoom] = useState(1);

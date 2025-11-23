@@ -1,4 +1,3 @@
-
 import React, { 
   useState, 
   useEffect, 
@@ -12,7 +11,9 @@ import {
   Droplet,
   Wind,
   Thermometer,
-  Plus
+  Plus,
+  Download,
+  Upload
 } from 'lucide-react';
 
 // Services
@@ -21,6 +22,7 @@ import { geminiService } from './services/geminiService';
 import { dbService } from './services/db';
 import { ImageUtils } from './services/imageUtils';
 import { hardwareService } from './services/hardwareService';
+import { BackupService } from './services/backupService';
 
 // Types & Constants
 import type { 
@@ -44,6 +46,7 @@ import { CameraView } from './components/CameraView';
 import { BatchDetailModal } from './components/modals/BatchDetailModal';
 import { AnalysisResultModal } from './components/modals/AnalysisResultModal';
 import { LegacyImportModal } from './components/modals/LegacyImportModal';
+import { BackupModal } from './components/modals/BackupModal';
 import { ChatInterface } from './components/ChatInterface';
 import { Haptic } from './utils/haptics';
 
@@ -61,9 +64,11 @@ export const App = () => {
   const [showImport, setShowImport] = useState(false);
   const [settings, setSettings] = useState<GrowSetup>(DEFAULT_GROW_SETUP);
   
+  // Backup Modal State
+  const [backupModalMode, setBackupModalMode] = useState<'backup' | 'restore' | null>(null);
+  
   // AI Analysis States
   const [analyzing, setAnalyzing] = useState(false);
-  // Store both full image and thumbnail to avoid re-processing
   const [analysisData, setAnalysisData] = useState<{ diagnosis: AiDiagnosis; image: string; thumbnail: string } | null>(null);
 
   const addToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -80,7 +85,6 @@ export const App = () => {
         const b = await dbService.getBatches();
         setBatches(b.length > 0 ? b : MOCK_BATCHES);
         const l = await dbService.getLogs();
-        // Sorting logic stays here for now, but moving to DB later is better
         setLogs(l.sort((a, b) => b.timestamp - a.timestamp));
         const s = await dbService.getSettings();
         setSettings(s);
@@ -105,7 +109,6 @@ export const App = () => {
     return () => unsub();
   }, []);
 
-  // PERFORMANCE: Memoize metrics to avoid recalculation on every render
   const metrics = useMemo(() => {
     return envReading ? EnvironmentService.processReading(envReading) : { vpd: 1.25, dli: 35, vpdStatus: VpdZone.TRANSPIRATION };
   }, [envReading]);
@@ -115,7 +118,6 @@ export const App = () => {
     setAnalyzing(true);
     
     try {
-        // PERFORMANCE: Process once, get both assets
         const processed = await ImageUtils.processImage(file);
         const batch = selectedBatch || batches[0] || MOCK_BATCHES[0];
         
@@ -147,7 +149,7 @@ export const App = () => {
         plantBatchId: batch.id,
         timestamp: Date.now(),
         imageUrl: analysisData.image,
-        thumbnailUrl: analysisData.thumbnail, // Pre-computed
+        thumbnailUrl: analysisData.thumbnail,
         actionType: 'Observation',
         aiDiagnosis: analysisData.diagnosis,
         manualNotes: analysisData.diagnosis.morphologyNotes
@@ -210,6 +212,35 @@ export const App = () => {
         addToast("No Active Batch in Room", "info");
      }
   };
+  
+  const handleBackup = async (password: string) => {
+    try {
+      await BackupService.createEncryptedBackup(password);
+      addToast("Backup Created & Downloaded", "success");
+      return true;
+    } catch (e) {
+      console.error(e);
+      addToast("Backup Failed", "error");
+      return false;
+    }
+  };
+
+  const handleRestore = async (password: string, file?: File) => {
+    if (!file) return false;
+    try {
+       const success = await BackupService.restoreFromBackup(file, password);
+       if (success) {
+           addToast("System Restored. Rebooting...", "success");
+           setTimeout(() => window.location.reload(), 2000);
+           return true;
+       } else {
+           return false;
+       }
+    } catch (e) {
+       console.error(e);
+       return false;
+    }
+  };
 
   if (loading) return <div className="h-screen bg-black text-white flex items-center justify-center font-mono animate-pulse tracking-widest text-xs">ESTABLISHING UPLINK...</div>;
 
@@ -238,6 +269,20 @@ export const App = () => {
            }}
         />
       )}
+      
+      {backupModalMode && (
+         <BackupModal 
+            mode={backupModalMode}
+            onClose={() => setBackupModalMode(null)}
+            onConfirm={(p, f) => {
+                if (backupModalMode === 'backup') {
+                    return handleBackup(p);
+                } else {
+                    return handleRestore(p, f);
+                }
+            }}
+         />
+      )}
 
       {selectedBatch && (
         <BatchDetailModal 
@@ -261,7 +306,6 @@ export const App = () => {
         {/* === VIEW: DASHBOARD === */}
         {view === 'dashboard' && (
            <div className="p-5 space-y-6 animate-fade-in flex-1 overflow-y-auto">
-             {/* Header */}
              <header className="flex justify-between items-center pt-safe-top">
                 <div>
                    <div className="flex items-center gap-2 text-neon-green mb-1">
@@ -277,7 +321,6 @@ export const App = () => {
                 </div>
              </header>
 
-             {/* Global Ticker / Telemetry */}
              <div>
                 <div className="flex justify-between items-end mb-3 px-1">
                    <h2 className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-[0.2em]">Aggregate Telemetry</h2>
@@ -312,7 +355,6 @@ export const App = () => {
                 </div>
              </div>
 
-             {/* Active Rooms Grid */}
              <div>
                 <h2 className="text-[10px] font-mono font-bold text-gray-500 uppercase tracking-[0.2em] mb-3 px-1">Grow Zones</h2>
                 <div className="grid grid-cols-2 gap-3">
@@ -322,7 +364,6 @@ export const App = () => {
                 </div>
              </div>
 
-             {/* Quick Actions */}
              <div className="grid grid-cols-3 gap-3">
                 <button onClick={() => setShowImport(true)} className="bg-[#121212] border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-2 active:scale-95 transition-all">
                     <Plus className="w-6 h-6 text-gray-400" />
@@ -359,7 +400,33 @@ export const App = () => {
                         <label className="text-xs text-gray-500 uppercase block mb-2">Lighting System</label>
                         <div className="text-white font-medium">{settings.lightingType}</div>
                     </div>
-                    <button onClick={() => setView('dashboard')} className="w-full py-3 bg-white/10 rounded-xl text-white font-bold">Back to Dashboard</button>
+                    
+                    {/* DATA MANAGEMENT SECTION */}
+                    <div className="mt-8 pt-4 border-t border-white/5">
+                        <h3 className="text-xs font-mono text-gray-500 uppercase tracking-widest mb-3">Data Security</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button 
+                                onClick={() => setBackupModalMode('backup')}
+                                className="p-4 bg-[#121212] border border-white/10 rounded-xl flex flex-col items-center gap-2 active:scale-95 transition-all hover:bg-white/5"
+                            >
+                                <div className="w-10 h-10 rounded-full bg-neon-green/10 flex items-center justify-center">
+                                    <Download className="w-5 h-5 text-neon-green" />
+                                </div>
+                                <span className="text-xs font-bold text-gray-300">Backup</span>
+                            </button>
+                            <button 
+                                onClick={() => setBackupModalMode('restore')}
+                                className="p-4 bg-[#121212] border border-white/10 rounded-xl flex flex-col items-center gap-2 active:scale-95 transition-all hover:bg-white/5"
+                            >
+                                <div className="w-10 h-10 rounded-full bg-neon-blue/10 flex items-center justify-center">
+                                    <Upload className="w-5 h-5 text-neon-blue" />
+                                </div>
+                                <span className="text-xs font-bold text-gray-300">Restore</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button onClick={() => setView('dashboard')} className="w-full py-4 bg-white/10 rounded-xl text-white font-bold mt-4 hover:bg-white/20 transition-colors">Back to Dashboard</button>
                 </div>
             </div>
         )}

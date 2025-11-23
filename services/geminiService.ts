@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality } from "@google/genai";
 import { AiDiagnosis, ChatMessage, GrowSetup, GrowLog, EnvironmentReading } from "../types";
 import { PHYTOPATHOLOGIST_INSTRUCTION } from "../constants";
@@ -32,7 +31,6 @@ const updateArOverlayTool: FunctionDeclaration = {
 };
 
 // Tool Definition for Chat Log Proposal
-// EXPANDED: Includes full diagnostic fields for Rich Cards in Command Center
 const proposeLogTool: FunctionDeclaration = {
   name: "proposeLog",
   description: "Generate a structured grow log entry or plant analysis. Use this when the user shares an image or asks for a diagnosis.",
@@ -55,7 +53,7 @@ const proposeLogTool: FunctionDeclaration = {
   }
 };
 
-// Schema for Plant Analysis (Direct Call)
+// Schema for Plant Analysis
 const plantAnalysisSchema: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -84,18 +82,24 @@ class GeminiService {
   private apiKey: string | undefined;
   private liveSession: any = null;
 
-  constructor() {
+  private getSafeApiKey(): string | undefined {
     try {
-      this.apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-    } catch (e) {
-      console.warn("Could not access process.env");
+      return (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+    } catch {
+      return undefined;
     }
+  }
 
-    if (this.apiKey) {
-      this.ai = new GoogleGenAI({ apiKey: this.apiKey });
-    } else {
-      console.warn("API_KEY not found in environment variables.");
-      this.ai = new GoogleGenAI({ apiKey: "" });
+  constructor() {
+    this.apiKey = this.getSafeApiKey();
+
+    // Safeguard: Initialize safely to prevent module crash.
+    try {
+      this.ai = new GoogleGenAI({ apiKey: this.apiKey || "dummy_key_for_init" });
+    } catch (e) {
+      console.error("Failed to initialize GoogleGenAI client:", e);
+      // Fallback dummy object to satisfy type checker if initialization fails catastrophically
+      this.ai = new GoogleGenAI({ apiKey: "fallback" }); 
     }
   }
 
@@ -133,7 +137,6 @@ class GeminiService {
     Adjust based on trichome maturity and stress.
     `;
 
-    // Strip header if present
     const cleanBase64 = base64Image.includes('base64,') ? base64Image.split('base64,')[1] : base64Image;
 
     try {
@@ -155,7 +158,6 @@ class GeminiService {
       if (!response.text) throw new Error("Empty response from Gemini");
       const json = JSON.parse(response.text);
       
-      // Map to strict interface
       return {
         healthScore: json.healthScore,
         detectedPests: json.detectedPests,
@@ -167,8 +169,8 @@ class GeminiService {
       };
 
     } catch (error) {
-      console.warn("Gemini 3 Pro Analysis Failed, attempting fallback...", error);
-      throw error; // In production, you might implement fallback here, but 3-Pro is robust.
+      console.warn("Gemini 3 Pro Analysis Failed", error);
+      throw error; 
     }
   }
 
@@ -184,7 +186,7 @@ class GeminiService {
 
      try {
         const response = await this.ai.models.generateContent({
-            model: 'gemini-3-pro-preview', // Upgraded for better context awareness
+            model: 'gemini-3-pro-preview',
             contents: {
                 parts: [
                     { inlineData: { mimeType: 'audio/mp4', data: audioBase64 } },
@@ -219,6 +221,7 @@ class GeminiService {
     onChunk: (text: string, grounding?: any) => void,
     onToolCall?: (payload: Partial<GrowLog>) => void
   ) {
+    if (!this.apiKey) throw new Error("API Key missing");
     const modelName = 'gemini-3-pro-preview'; 
     
     const systemPrompt = `You are Cultivator's Copilot, an expert Cannabis Consultant powered by Gemini 3 Pro.
@@ -232,7 +235,6 @@ class GeminiService {
     4. ALWAYS call 'proposeLog' if the user uploads a plant photo, populating the healthScore, pests, deficiencies, and recommendations fields based on your visual analysis.
     `;
 
-    // Construct history properly
     const contents = history
       .filter(h => h.text.trim() !== '' || h.attachment)
       .map(msg => {
@@ -250,7 +252,6 @@ class GeminiService {
         };
       });
     
-    // Add new message
     const newParts: any[] = [];
     if (attachment) {
        const cleanData = attachment.split('base64,')[1] || attachment;
@@ -280,14 +281,12 @@ class GeminiService {
                 onChunk(chunk.text, grounding);
             }
             
-            // Handle Function Calls
             const toolCalls = chunk.candidates?.[0]?.content?.parts?.filter(p => p.functionCall);
             if (toolCalls && toolCalls.length > 0) {
                 for (const tc of toolCalls) {
                      if (tc.functionCall && tc.functionCall.name === 'proposeLog' && onToolCall) {
                          const args = tc.functionCall.args as any;
                          
-                         // Map rich analysis fields if present
                          const diagnosis: Partial<AiDiagnosis> = args.healthScore ? {
                              healthScore: args.healthScore,
                              detectedPests: args.detectedPests || [],
@@ -330,7 +329,6 @@ class GeminiService {
                 for (const fc of msg.toolCall.functionCalls) {
                   if (fc.name === 'updateArOverlay') {
                     onArUpdate(fc.args);
-                    // Respond to tool call to keep session alive/happy
                     if (this.liveSession) {
                         this.liveSession.sendToolResponse({
                           functionResponses: {
@@ -385,19 +383,19 @@ class GeminiService {
 
   // --- 5. Veo Video Generation ---
   public async generateGrowthSimulation(image: string): Promise<string> {
-    if (!this.apiKey) throw new Error("API Key missing");
+    const safeKey = this.getSafeApiKey();
+    if (!safeKey) throw new Error("API Key missing");
 
-    // Check Key Selection (Mandatory for Veo)
     const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
     if (!hasKey) {
         await (window as any).aistudio?.openSelectKey();
-        // Re-check
         const hasKeyAfter = await (window as any).aistudio?.hasSelectedApiKey();
         if(!hasKeyAfter) throw new Error("Paid API Key required for Veo simulation.");
     }
-
-    // New instance for Veo to pick up the paid key
-    const veoAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    // Re-fetch key in case it was just set by openSelectKey
+    const refreshedKey = this.getSafeApiKey();
+    const veoAi = new GoogleGenAI({ apiKey: refreshedKey || "missing_key" });
     
     let operation = await veoAi.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
@@ -421,8 +419,8 @@ class GeminiService {
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) throw new Error("Video generation failed");
 
-    // Fetch the actual bytes with the key
-    const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+    // Use the correctly retrieved key, not process.env directly which might be undefined in browser context
+    const response = await fetch(`${downloadLink}&key=${refreshedKey}`);
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   }
