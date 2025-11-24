@@ -96,3 +96,16 @@ Use GitHub Copilot directly from the terminal to stay aligned with the MCP bridg
 - **Launch & authenticate:** Run `copilot` in the project root, use `/login` when prompted, and trust the working directory. You can also provide a fine-grained PAT via `GH_TOKEN` or `GITHUB_TOKEN` with the **Copilot Requests** permission.
 - **Verify:** `copilot --banner` should show the animated banner. Then submit a prompt like `"Explain the files in this directory"` to confirm responses stream.
 - **Model + MCP awareness:** By default the CLI uses Claude Sonnet 4.5, but you can switch with `/model`. The CLI already bundles GitHub's MCP server, so keep the `scripts/mcp_client.js` bridge available for custom tooling by exporting the `mcpServers` block above into `.github/agent.json` or local configs.
+
+## Cloud Build trigger (GCP)
+
+Use the bundled `cloudbuild.yaml` for a simple CI flow in Google Cloud Build. To recreate the trigger referenced in the project brief:
+
+1. **Trigger type:** Push to a branch (2nd gen, GitHub App repository).
+2. **Repository:** `stevenschling13/Cultivators-CoPilot-2` with branch regex `^main$` (no inversion).
+3. **Location:** Region `global`.
+4. **Configuration:** Use the repo-stored `cloudbuild.yaml` at the repository root.
+5. **Service account:** `959574223828-compute@developer.gserviceaccount.com` (replace if you need least-privilege).
+6. **Logs:** Enable "Send build logs to GitHub" if you want GitHub-visible build logs.
+
+The pipeline installs dependencies with `npm ci` and runs the production build via `npm run build`, keeping logs in Cloud Logging.
