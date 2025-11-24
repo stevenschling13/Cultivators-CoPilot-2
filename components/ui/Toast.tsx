@@ -1,6 +1,6 @@
-
 import React from 'react';
 import { CheckCircle2, XCircle, Info } from 'lucide-react';
+import { Haptic } from '../../utils/haptics';
 
 export interface ToastMsg {
   id: string;
@@ -20,7 +20,7 @@ export const ToastContainer = ({ toasts, removeToast }: { toasts: ToastMsg[], re
               t.type === 'error' ? 'bg-alert-red/10 border-alert-red/20 text-alert-red' : 
               'bg-white/10 border-white/10 text-white'}
           `}
-          onClick={() => removeToast(t.id)}
+          onClick={() => { Haptic.light(); removeToast(t.id); }}
         >
           {t.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
           {t.type === 'error' && <XCircle className="w-5 h-5" />}

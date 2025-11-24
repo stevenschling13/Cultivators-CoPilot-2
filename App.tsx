@@ -315,7 +315,7 @@ export const App = () => {
                      ].map((action) => (
                         <button 
                            key={action.id} 
-                           onClick={() => action.action ? action.action() : handleQuickLog(action.id)} 
+                           onClick={() => { Haptic.tap(); action.action ? action.action() : handleQuickLog(action.id); }} 
                            className="flex flex-col items-center gap-2 min-w-[72px] group"
                         >
                            <div className={`w-14 h-14 rounded-[20px] bg-[#121212] border border-white/10 flex items-center justify-center transition-all active:scale-90 group-hover:border-${action.color}/50 group-hover:bg-white/5 shadow-lg relative overflow-hidden`}>
@@ -336,7 +336,7 @@ export const App = () => {
         {view === 'settings' && (
             <div className="p-6 pt-safe-top animate-fade-in space-y-6">
                 <div className="flex items-center gap-3 mb-6">
-                   <button onClick={() => setView('dashboard')} className="p-2 -ml-2 rounded-full hover:bg-white/10 active:scale-90 transition-all"><ArrowLeft className="w-6 h-6" /></button>
+                   <button onClick={() => { Haptic.tap(); setView('dashboard'); }} className="p-2 -ml-2 rounded-full hover:bg-white/10 active:scale-90 transition-all"><ArrowLeft className="w-6 h-6" /></button>
                    <h2 className="text-xl font-bold font-mono uppercase tracking-wider">System Config</h2>
                 </div>
                 <div className="space-y-4">
@@ -351,11 +351,11 @@ export const App = () => {
                     <div className="pt-4 border-t border-white/5">
                         <h3 className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-3 px-1">Data Sovereignty</h3>
                         <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => setBackupModalMode('backup')} className="p-4 bg-[#121212] border border-white/10 rounded-2xl flex flex-col items-center gap-2 active:scale-95 transition-all hover:bg-white/5 group">
+                            <button onClick={() => { Haptic.tap(); setBackupModalMode('backup'); }} className="p-4 bg-[#121212] border border-white/10 rounded-2xl flex flex-col items-center gap-2 active:scale-95 transition-all hover:bg-white/5 group">
                                 <div className="w-10 h-10 rounded-full bg-neon-green/10 flex items-center justify-center group-hover:bg-neon-green/20 transition-colors"><Download className="w-5 h-5 text-neon-green" /></div>
                                 <span className="text-xs font-bold text-gray-300">Backup</span>
                             </button>
-                            <button onClick={() => setBackupModalMode('restore')} className="p-4 bg-[#121212] border border-white/10 rounded-2xl flex flex-col items-center gap-2 active:scale-95 transition-all hover:bg-white/5 group">
+                            <button onClick={() => { Haptic.tap(); setBackupModalMode('restore'); }} className="p-4 bg-[#121212] border border-white/10 rounded-2xl flex flex-col items-center gap-2 active:scale-95 transition-all hover:bg-white/5 group">
                                 <div className="w-10 h-10 rounded-full bg-neon-blue/10 flex items-center justify-center group-hover:bg-neon-blue/20 transition-colors"><Upload className="w-5 h-5 text-neon-blue" /></div>
                                 <span className="text-xs font-bold text-gray-300">Restore</span>
                             </button>

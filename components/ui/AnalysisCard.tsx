@@ -1,7 +1,7 @@
-
 import React from 'react';
 import { GrowLog } from '../../types';
 import { Activity, AlertTriangle, Bug, CheckCircle2, PlusCircle, Leaf } from 'lucide-react';
+import { Haptic } from '../../utils/haptics';
 
 interface AnalysisCardProps {
   data: Partial<GrowLog>;
@@ -80,7 +80,7 @@ export const AnalysisCard = ({ data, onSave }: AnalysisCardProps) => {
 
         {/* Footer Action */}
         <button 
-           onClick={onSave}
+           onClick={() => { Haptic.tap(); onSave(); }}
            className="w-full py-3 bg-neon-green/10 border border-neon-green/30 text-neon-green text-sm font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-neon-green hover:text-black transition-all active:scale-95"
         >
            <PlusCircle className="w-4 h-4" />

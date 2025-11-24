@@ -14,6 +14,7 @@ interface CameraViewProps {
 // Sending 4K frames to AI is wasteful and blocks the main thread.
 // 480px width is sufficient for pest detection/biomass.
 const AR_ANALYSIS_WIDTH = 480;
+const AR_FRAME_INTERVAL = 500; // ms between AI frames (2 FPS)
 
 export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr = false }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -23,8 +24,9 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
   const [arMode, setArMode] = useState(false);
   const [arData, setArData] = useState<any>(null);
   
-  // Use 'any' to avoid ReturnType<typeof setTimeout> conflicts between Node and Browser types
-  const arTimeoutRef = useRef<any>(null);
+  // Animation Frame Reference for clean cancellation
+  const rafRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number>(0);
 
   // New Camera Logic: Zoom & Flash
   const [zoom, setZoom] = useState(1);
@@ -55,12 +57,13 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
     
     // Auto-start AR if requested
     if (autoStartAr) {
+        // Small delay to let camera initialize
         setTimeout(() => startArSession(), 800);
     }
 
     return () => {
       isMounted = false;
-      if (arTimeoutRef.current) clearTimeout(arTimeoutRef.current);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       geminiService.stopLiveAnalysis();
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -94,38 +97,42 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
   };
 
   const stopArSession = () => {
-    if (arTimeoutRef.current) clearTimeout(arTimeoutRef.current);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     geminiService.stopLiveAnalysis();
     setArMode(false);
     setArData(null);
   };
 
-  const processArFrame = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+  const processArFrame = (timestamp: number) => {
+    if (!videoRef.current || !canvasRef.current) {
+        rafRef.current = requestAnimationFrame(processArFrame);
+        return;
+    }
     
-    // PERFORMANCE: Use requestAnimationFrame logic via recursive setTimeout
-    // to ensure we don't stack frames if processing is slow.
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+    // Throttling Logic
+    if (timestamp - lastFrameTimeRef.current >= AR_FRAME_INTERVAL) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
 
-    if (video.videoWidth > 0) {
-        // Downscale for AI Analysis
-        const scale = AR_ANALYSIS_WIDTH / video.videoWidth;
-        canvas.width = AR_ANALYSIS_WIDTH;
-        canvas.height = video.videoHeight * scale;
-        
-        const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
-        if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            // quality 0.6 is fine for AI
-            const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
-            geminiService.sendLiveFrame(base64);
+        if (video.videoWidth > 0) {
+            // Downscale for AI Analysis
+            const scale = AR_ANALYSIS_WIDTH / video.videoWidth;
+            canvas.width = AR_ANALYSIS_WIDTH;
+            canvas.height = video.videoHeight * scale;
+            
+            const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+            if (ctx) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                // quality 0.6 is fine for AI
+                const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+                geminiService.sendLiveFrame(base64);
+            }
         }
+        lastFrameTimeRef.current = timestamp;
     }
 
-    // Schedule next frame ~500ms
-    arTimeoutRef.current = setTimeout(processArFrame, 500);
+    // Continue loop
+    rafRef.current = requestAnimationFrame(processArFrame);
   };
 
   const startArSession = async () => {
@@ -145,10 +152,12 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
         }
       );
       
-      // Kickoff loop
-      processArFrame();
+      // Kickoff loop using rAF
+      lastFrameTimeRef.current = 0;
+      rafRef.current = requestAnimationFrame(processArFrame);
 
     } catch (e) {
+      console.error("Failed to start AR", e);
       setArMode(false);
       Haptic.error();
     }
@@ -213,7 +222,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
        />
        
        <button 
-         onClick={onCancel}
+         onClick={() => { Haptic.tap(); onCancel(); }}
          className="absolute top-6 right-6 z-50 p-3 rounded-full bg-black/40 backdrop-blur text-white border border-white/10 active:scale-90 transition-all"
          style={{ marginTop: 'env(safe-area-inset-top)' }}
        >
@@ -339,7 +348,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
             </button>
             
             <button 
-              onClick={arMode ? stopArSession : startArSession}
+              onClick={() => { Haptic.tap(); arMode ? stopArSession() : startArSession(); }}
               className={`p-4 rounded-full backdrop-blur active:scale-90 transition-all border ${arMode ? 'bg-neon-green text-black border-neon-green shadow-[0_0_20px_rgba(0,255,163,0.5)]' : 'bg-white/10 text-white border-white/10'}`}
             >
               {arMode ? <Eye className="w-6 h-6" /> : <Scan className="w-6 h-6" />}

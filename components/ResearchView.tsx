@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -103,7 +102,7 @@ const LogAnalysisPanel = ({ log, onClose }: { log: GrowLog, onClose: () => void 
   if (!diagnosis) {
     return (
       <div className="bg-[#121212] rounded-[32px] p-8 border border-white/10 animate-slide-up relative text-center">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-white/5 rounded-full"><X className="w-5 h-5 text-gray-500" /></button>
+        <button onClick={() => { Haptic.tap(); onClose(); }} className="absolute top-4 right-4 p-2 hover:bg-white/5 rounded-full"><X className="w-5 h-5 text-gray-500" /></button>
         <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
            <Beaker className="w-8 h-8 text-gray-500" />
         </div>
@@ -128,7 +127,7 @@ const LogAnalysisPanel = ({ log, onClose }: { log: GrowLog, onClose: () => void 
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/60 to-transparent"></div>
           
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/40 backdrop-blur-md rounded-full text-white border border-white/10 hover:bg-white/10 z-20 active:scale-90 transition-all">
+          <button onClick={() => { Haptic.tap(); onClose(); }} className="absolute top-4 right-4 p-2 bg-black/40 backdrop-blur-md rounded-full text-white border border-white/10 hover:bg-white/10 z-20 active:scale-90 transition-all">
              <X className="w-5 h-5" />
           </button>
 
@@ -441,7 +440,7 @@ export const ResearchView = ({ logs, batches, currentBatchId }: ResearchViewProp
             {/* Batch Chips */}
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                <button 
-                 onClick={() => setSelectedBatchId('')} 
+                 onClick={() => { Haptic.tap(); setSelectedBatchId(''); }} 
                  className={`px-4 py-2 rounded-full border text-xs font-bold whitespace-nowrap transition-all ${!selectedBatchId ? 'bg-white text-black border-white' : 'bg-transparent border-white/10 text-gray-500'}`}
                >
                  All Batches
@@ -449,7 +448,7 @@ export const ResearchView = ({ logs, batches, currentBatchId }: ResearchViewProp
                {batches.map(b => (
                  <button
                    key={b.id}
-                   onClick={() => setSelectedBatchId(b.id)}
+                   onClick={() => { Haptic.tap(); setSelectedBatchId(b.id); }}
                    className={`
                      px-4 py-2 rounded-full border text-xs font-bold whitespace-nowrap transition-all
                      ${selectedBatchId === b.id 
@@ -608,7 +607,7 @@ export const ResearchView = ({ logs, batches, currentBatchId }: ResearchViewProp
                  {filteredLogs.map(log => (
                     <div 
                        key={log.id} 
-                       onClick={() => setSelectedLog(log)}
+                       onClick={() => { Haptic.tap(); setSelectedLog(log); }}
                        className="bg-[#0A0A0A] border border-white/5 rounded-xl p-4 flex gap-4 active:scale-[0.99] transition-transform cursor-pointer hover:border-white/10"
                     >
                        <div className="w-16 h-16 bg-white/5 rounded-lg shrink-0 overflow-hidden">

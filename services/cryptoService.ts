@@ -6,7 +6,8 @@
 
 export class CryptoService {
   private static ALGORITHM = 'AES-GCM';
-  private static KDF_ITERATIONS = 100000;
+  // 2025 OWASP/NIST Recommendation: 600,000 iterations for PBKDF2-HMAC-SHA256
+  private static KDF_ITERATIONS = 600000;
   private static SALT_LENGTH = 16;
   private static IV_LENGTH = 12;
 

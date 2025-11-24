@@ -134,7 +134,7 @@ export class HardwareService {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, { body, icon: '/favicon.ico' });
     } else {
-      // Reduced noise for unpermitted notifications
+      // Reduced noise for unpermitted notifications to prevent build warnings
       console.debug("Notification skipped:", title);
     }
   }

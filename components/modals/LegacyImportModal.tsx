@@ -1,9 +1,9 @@
-
 import React, { memo, useState } from 'react';
 import { Archive } from 'lucide-react';
 import { dbService } from '../../services/db';
 import { ImageUtils } from '../../services/imageUtils';
 import { GrowLog } from '../../types';
+import { Haptic } from '../../utils/haptics';
 
 export const LegacyImportModal = memo(({ onClose, onImportComplete }: { onClose: () => void, onImportComplete: () => void }) => {
   const [files, setFiles] = useState<FileList | null>(null);
@@ -70,9 +70,9 @@ export const LegacyImportModal = memo(({ onClose, onImportComplete }: { onClose:
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-neon-blue/10 file:text-neon-blue hover:file:bg-neon-blue/20 mb-6"
               />
               <div className="flex gap-4">
-                 <button onClick={onClose} className="flex-1 py-3 text-white font-medium">Cancel</button>
+                 <button onClick={() => { Haptic.tap(); onClose(); }} className="flex-1 py-3 text-white font-medium">Cancel</button>
                  <button 
-                   onClick={handleImport}
+                   onClick={() => { Haptic.tap(); handleImport(); }}
                    disabled={!files}
                    className="flex-1 py-3 bg-neon-blue text-black rounded-xl font-bold disabled:opacity-50"
                  >

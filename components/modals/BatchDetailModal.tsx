@@ -1,10 +1,10 @@
-
 import React, { memo, useState } from 'react';
 import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity } from 'lucide-react';
 import { PlantBatch, GrowLog } from '../../types';
 import { FLIP_DATE, STAGE_INFO } from '../../constants';
 import { SwipeableLogItem } from '../SwipeableLogItem';
 import { LogEditModal } from './LogEditModal';
+import { Haptic } from '../../utils/haptics';
 
 interface BatchDetailModalProps {
   batch: PlantBatch;
@@ -52,7 +52,7 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-[#050505]"></div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent"></div>
 
-        <button onClick={onClose} className="absolute top-6 right-6 p-3 bg-black/40 backdrop-blur-md rounded-full text-white border border-white/10 hover:bg-white/10 transition-colors z-50">
+        <button onClick={() => { Haptic.tap(); onClose(); }} className="absolute top-6 right-6 p-3 bg-black/40 backdrop-blur-md rounded-full text-white border border-white/10 hover:bg-white/10 transition-colors z-50">
            <X className="w-6 h-6" />
         </button>
         

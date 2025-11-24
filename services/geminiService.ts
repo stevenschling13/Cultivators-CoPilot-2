@@ -1,11 +1,11 @@
-import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality } from "@google/genai";
+import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage } from "@google/genai";
 import { AiDiagnosis, ChatMessage, GrowSetup, GrowLog, EnvironmentReading, Room, FacilityBriefing, CohortAnalysis, ChatContext } from "../types";
 import { PHYTOPATHOLOGIST_INSTRUCTION, FLIP_DATE } from "../constants";
 
 // Tool Definition for AR Overlay
 const updateArOverlayTool: FunctionDeclaration = {
   name: "updateArOverlay",
-  description: "Update the AR Heads-Up Display with real-time plant analysis data.",
+  description: "Update the AR Heads-Up Display with real-time plant analysis data based on the video stream.",
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -102,49 +102,40 @@ const cohortAnalysisSchema: Schema = {
 };
 
 class GeminiService {
-  public ai: GoogleGenAI;
+  private ai: GoogleGenAI | undefined;
   private apiKey: string | undefined;
-  private liveSession: any = null;
+  
+  // Use a Promise to track the active session state to prevent race conditions
+  private currentSessionPromise: Promise<any> | null = null;
 
-  private getSafeApiKey(): string | undefined {
-    try {
-      // Safe process check for browsers
-      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-        return process.env.API_KEY;
-      }
-      // Fallback for polyfilled environment
-      if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
-        return (window as any).process.env.API_KEY;
-      }
-      return undefined;
-    } catch {
-      return undefined;
+  private resolveApiKey(): string | undefined {
+    const viteKey = typeof import.meta !== "undefined" ? (import.meta as any).env?.VITE_GEMINI_API_KEY : undefined;
+    const nodeKey = typeof process !== "undefined" ? process.env?.API_KEY : undefined;
+    const windowKey = typeof window !== "undefined" ? (window as any)?.process?.env?.API_KEY : undefined;
+    return viteKey || nodeKey || windowKey;
+  }
+
+  private ensureClient(): GoogleGenAI {
+    if (this.ai && this.apiKey) return this.ai;
+
+    this.apiKey = this.resolveApiKey();
+    if (!this.apiKey) {
+      console.error("CRITICAL: Gemini API key is missing. Check process.env.API_KEY.");
+      // We do NOT return a dummy client here. We want to fail fast if the key is missing.
+      throw new Error("Gemini API key not configured");
     }
+    this.ai = new GoogleGenAI({ apiKey: this.apiKey });
+    return this.ai;
   }
 
   constructor() {
-    this.apiKey = this.getSafeApiKey();
-
-    // Safeguard: Initialize safely to prevent module crash.
-    // If no key is present initially, we use a placeholder. Methods requiring a key will check again.
-    try {
-      this.ai = new GoogleGenAI({ apiKey: this.apiKey || "dummy_key_for_init" });
-    } catch (e) {
-      console.error("Failed to initialize GoogleGenAI client:", e);
-      // Fallback to avoid crashing app initialization, specific methods will fail if called
-      this.ai = {} as any; 
-    }
+    // Lazy initialization
   }
 
   // --- 0. Dashboard Intelligence ---
 
   public async generateFacilityBriefing(rooms: Room[], logs: GrowLog[]): Promise<FacilityBriefing> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     const recentLogs = logs.slice(0, 5).map(l => ({ type: l.actionType, notes: l.manualNotes }));
     const roomSummaries = rooms.map(r => ({
@@ -165,7 +156,7 @@ class GeminiService {
     `;
 
     try {
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: {
           parts: [{ text: `Telemetry: ${JSON.stringify(roomSummaries)}. Recent Activity: ${JSON.stringify(recentLogs)}. Generate Briefing.` }]
@@ -193,12 +184,7 @@ class GeminiService {
   // --- 0.5 Research Intelligence ---
 
   public async generateCohortAnalysis(logs: GrowLog[]): Promise<CohortAnalysis> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-        this.apiKey = key;
-        this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     // Prepare data (limit to last 20 significant logs to save context window)
     const analysisSet = logs.slice(0, 20).map(l => ({
@@ -218,7 +204,7 @@ class GeminiService {
     `;
 
     try {
-        const response = await this.ai.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: {
                 parts: [{ text: `Log Dataset: ${JSON.stringify(analysisSet)}. Analyze this cohort.` }]
@@ -248,14 +234,7 @@ class GeminiService {
     envData?: EnvironmentReading,
     breederDays?: number
   ): Promise<AiDiagnosis> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    
-    // Re-init with correct key if it was missing during constructor
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
+    const ai = this.ensureClient();
 
     const contextAwareSystemInstruction = `
     ${PHYTOPATHOLOGIST_INSTRUCTION}
@@ -283,7 +262,7 @@ class GeminiService {
     const cleanBase64 = base64Image.includes('base64,') ? base64Image.split('base64,')[1] : base64Image;
 
     try {
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: {
           parts: [
@@ -295,7 +274,7 @@ class GeminiService {
           systemInstruction: contextAwareSystemInstruction,
           responseMimeType: 'application/json',
           responseSchema: plantAnalysisSchema,
-          thinkingConfig: { thinkingBudget: 32768 }
+          thinkingConfig: { thinkingBudget: 32768 } // High budget for diagnostic reasoning
         }
       });
 
@@ -318,11 +297,10 @@ class GeminiService {
     }
   }
 
-  // --- 2. Voice Log Processing (Upgraded to Gemini 3 Pro) ---
+  // --- 2. Voice Log Processing ---
   
   public async processVoiceLog(audioBase64: string): Promise<Partial<GrowLog>> {
-     const key = this.getSafeApiKey();
-     if (!key) throw new Error("API Key missing");
+     const ai = this.ensureClient();
 
      const systemPrompt = `
      You are a Voice Logging Assistant. Transcribe and categorize.
@@ -330,7 +308,7 @@ class GeminiService {
      `;
 
      try {
-        const response = await this.ai.models.generateContent({
+        const response = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: {
                 parts: [
@@ -366,14 +344,7 @@ class GeminiService {
     onChunk: (text: string, grounding?: any) => void,
     onToolCall?: (payload: Partial<GrowLog>) => void
   ) {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
-
-    const modelName = 'gemini-3-pro-preview'; 
+    const ai = this.ensureClient();
     
     // Construct Real-Time Intelligence Context
     const batchContext = context.batches.map(b => {
@@ -409,7 +380,6 @@ class GeminiService {
     2. **Environment Check:** Compare current VPD to stage targets.
     3. **Image Analysis:** If provided an image, analyze it for health, pests, and deficiencies.
     4. **Log Events:** If the user confirms an action (e.g., "I watered Blue"), call the 'proposeLog' tool.
-    5. **Search:** Use Google Search for recent strain info or pest outbreaks.
     
     ALWAYS call 'proposeLog' if the user uploads a plant photo, populating the fields based on your visual analysis.
     `;
@@ -431,55 +401,38 @@ class GeminiService {
         };
       });
     
+    // Add new message
     const newParts: any[] = [];
     if (attachment) {
        const cleanData = attachment.split('base64,')[1] || attachment;
        newParts.push({ inlineData: { mimeType: 'image/webp', data: cleanData } });
-       newParts.push({ text: newMessage || "Analyze this plant image in detail for health, pests, and stage." }); 
-    } else {
-       newParts.push({ text: newMessage });
     }
-
-    const chat = this.ai.chats.create({
-      model: modelName,
-      config: { 
-        systemInstruction: systemPrompt,
-        tools: [{ googleSearch: {} }, { functionDeclarations: [proposeLogTool] }]
-      },
-      history: contents
-    });
+    newParts.push({ text: newMessage });
+    contents.push({ role: 'user', parts: newParts });
 
     try {
-        const result = await chat.sendMessageStream({ 
-            message: newParts 
-        } as any); 
+        const responseStream = await ai.models.generateContentStream({
+            model: 'gemini-3-pro-preview',
+            contents: contents,
+            config: {
+                systemInstruction: systemPrompt,
+                tools: [{ functionDeclarations: [proposeLogTool] }], // EXCLUSIVE: No googleSearch allowed here
+                toolConfig: { functionCallingConfig: { mode: 'AUTO' } }
+            }
+        });
 
-        for await (const chunk of result) {
+        for await (const chunk of responseStream) {
+            // Handle Text
             if (chunk.text) {
-                const grounding = chunk.candidates?.[0]?.groundingMetadata;
-                onChunk(chunk.text, grounding);
+                onChunk(chunk.text, chunk.groundingMetadata);
             }
             
-            const toolCalls = chunk.candidates?.[0]?.content?.parts?.filter(p => p.functionCall);
-            if (toolCalls && toolCalls.length > 0) {
-                for (const tc of toolCalls) {
-                     if (tc.functionCall && tc.functionCall.name === 'proposeLog' && onToolCall) {
-                         const args = tc.functionCall.args as any;
-                         
-                         const diagnosis: Partial<AiDiagnosis> = args.healthScore ? {
-                             healthScore: args.healthScore,
-                             detectedPests: args.detectedPests || [],
-                             nutrientDeficiencies: args.nutrientDeficiencies || [],
-                             recommendations: args.recommendations || [],
-                             morphologyNotes: args.manualNotes
-                         } : {};
-
-                         onToolCall({
-                             manualNotes: args.manualNotes,
-                             actionType: args.actionType,
-                             aiDiagnosis: Object.keys(diagnosis).length > 0 ? diagnosis as AiDiagnosis : undefined
-                         });
-                     }
+            // Handle Function Calls
+            const fcs = chunk.functionCalls;
+            if (fcs && fcs.length > 0) {
+                const fc = fcs[0];
+                if (fc.name === 'proposeLog') {
+                    if (onToolCall) onToolCall(fc.args as unknown as Partial<GrowLog>);
                 }
             }
         }
@@ -489,104 +442,99 @@ class GeminiService {
     }
   }
 
-  // --- 4. Live AR Analysis ---
+  // --- 4. Live API (AR Overlay) ---
 
   public async startLiveAnalysis(
-    onArUpdate: (data: any) => void,
-    onError?: (err: any) => void,
-    onClose?: () => void
-  ): Promise<void> {
-    const key = this.getSafeApiKey();
-    if (!key) throw new Error("API Key missing");
-    if (!this.apiKey && key) {
-       this.apiKey = key;
-       this.ai = new GoogleGenAI({ apiKey: key });
-    }
-
-    try {
-        this.liveSession = await this.ai.live.connect({
-          model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-          callbacks: {
-            onopen: () => console.log("AR Session Connected"),
-            onmessage: (msg: any) => {
-              if (msg.toolCall) {
-                for (const fc of msg.toolCall.functionCalls) {
-                  if (fc.name === 'updateArOverlay') {
-                    onArUpdate(fc.args);
-                    if (this.liveSession) {
-                        this.liveSession.sendToolResponse({
-                          functionResponses: {
-                            id: fc.id,
-                            name: fc.name,
-                            response: { result: "OK" }
-                          }
-                        });
-                    }
-                  }
-                }
-              }
+    onData: (data: any) => void,
+    onError: (err: any) => void,
+    onClose: () => void
+  ) {
+    const ai = this.ensureClient();
+    
+    // Store the Session Promise to manage the active connection state
+    this.currentSessionPromise = ai.live.connect({
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        callbacks: {
+            onopen: () => {
+                console.log("Live API Session Connected");
             },
-            onclose: (e) => {
-                console.log("AR Session Closed", e);
-                if (onClose) onClose();
+            onmessage: (message: LiveServerMessage) => {
+                // Handle Tool Calls (The model's way of sending structured data back)
+                if (message.toolCall) {
+                    for (const fc of message.toolCall.functionCalls) {
+                        if (fc.name === 'updateArOverlay') {
+                            onData(fc.args);
+                            
+                            // Send dummy response to keep context sync (optional but good practice)
+                            if (this.currentSessionPromise) {
+                                this.currentSessionPromise.then(session => {
+                                    session.sendToolResponse({
+                                        functionResponses: {
+                                            id: fc.id,
+                                            name: fc.name,
+                                            response: { result: "ok" }
+                                        }
+                                    });
+                                });
+                            }
+                        }
+                    }
+                }
             },
             onerror: (e) => {
-                console.error("AR Error", e);
-                if (onError) onError(e);
+                console.error("Live API Error", e);
+                onError(e);
             },
-          },
-          config: {
-            responseModalities: [Modality.AUDIO],
-            tools: [{ functionDeclarations: [updateArOverlayTool] }],
-            systemInstruction: "You are an advanced botanical analysis AI for Cannabis cultivation. Continuously analyze the video stream. Identify the plant's health status, estimate biomass density, count visible colas/bud sites, and detect any critical issues (pests, light burn, drooping). You MUST call the `updateArOverlay` function frequently (every few seconds) to update the user's HUD. Do not speak unless asked, rely on the overlay tool."
-          }
-        });
-    } catch (e) {
-        console.error("Failed to connect AR session", e);
-        if (onError) onError(e);
-    }
+            onclose: () => {
+                console.log("Live API Closed");
+                onClose();
+            }
+        },
+        config: {
+            responseModalities: [Modality.AUDIO], // Required by Live API
+            systemInstruction: "You are an AR Vision Assistant for a cannabis grower. Analyze the video stream. Call the 'updateArOverlay' function continuously to update the HUD with plant health, cola counts, and density estimates.",
+            tools: [{ functionDeclarations: [updateArOverlayTool] }]
+        }
+    });
+
+    await this.currentSessionPromise;
   }
 
-  public sendLiveFrame(base64: string) {
-    if (this.liveSession) {
-      this.liveSession.sendRealtimeInput({
-        media: {
-           mimeType: 'image/jpeg',
-           data: base64
-        }
-      });
-    }
+  public async sendLiveFrame(base64Image: string) {
+      if (!this.currentSessionPromise) return;
+      
+      // Chain off the promise to ensure session is ready
+      this.currentSessionPromise.then(session => {
+          session.sendRealtimeInput({
+              media: {
+                  mimeType: 'image/jpeg',
+                  data: base64Image
+              }
+          });
+      }).catch(e => console.warn("Frame dropped, session not ready", e));
   }
 
   public stopLiveAnalysis() {
-    if (this.liveSession) {
-      this.liveSession.close();
-      this.liveSession = null;
-    }
+      if (this.currentSessionPromise) {
+          this.currentSessionPromise.then(session => {
+              session.close();
+          });
+          this.currentSessionPromise = null;
+      }
   }
 
   // --- 5. Veo Video Generation ---
-  public async generateGrowthSimulation(image: string): Promise<string> {
-    const key = this.getSafeApiKey();
-    // For Veo, we need the user's selected key specifically
-    const hasKey = await (window as any).aistudio?.hasSelectedApiKey();
-    if (!hasKey) {
-        await (window as any).aistudio?.openSelectKey();
-    }
-    
-    // Re-fetch key in case it was just set by openSelectKey
-    // Note: getSafeApiKey retrieves from process.env, which should be updated by the environment
-    const refreshedKey = this.getSafeApiKey();
-    if (!refreshedKey) throw new Error("API Key could not be retrieved even after selection.");
 
-    const veoAi = new GoogleGenAI({ apiKey: refreshedKey });
-    
-    let operation = await veoAi.models.generateVideos({
+  public async generateGrowthSimulation(image: string): Promise<string> {
+    const ai = this.ensureClient();
+    const cleanBase64 = image.includes('base64,') ? image.split('base64,')[1] : image;
+
+    let operation = await ai.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
-      prompt: 'Cinematic time-lapse of this cannabis plant flowering and maturing, trichomes turning amber, buds swelling, ultra realistic, 4k',
+      prompt: 'Cinematic timelapse of this cannabis plant maturing, buds swelling, trichomes glistening, high quality, photorealistic',
       image: {
-        imageBytes: image.includes('base64,') ? image.split('base64,')[1] : image,
-        mimeType: 'image/png',
+        imageBytes: cleanBase64,
+        mimeType: 'image/png', // Assuming source is standardized
       },
       config: {
         numberOfVideos: 1,
@@ -595,18 +543,17 @@ class GeminiService {
       }
     });
 
+    // Poll for completion
     while (!operation.done) {
       await new Promise(resolve => setTimeout(resolve, 5000));
-      operation = await veoAi.operations.getVideosOperation({operation: operation});
+      operation = await ai.operations.getVideosOperation({operation: operation});
     }
 
-    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!downloadLink) throw new Error("Video generation failed");
+    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+    if (!videoUri) throw new Error("Video generation failed");
 
-    // Use the correctly retrieved key
-    const response = await fetch(`${downloadLink}&key=${refreshedKey}`);
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    // Append API key for download
+    return `${videoUri}&key=${this.apiKey}`;
   }
 }
 
