@@ -1,4 +1,4 @@
-import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage } from "@google/genai";
+import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage, FunctionCallingMode } from "@google/genai";
 import { AiDiagnosis, ChatMessage, GrowSetup, GrowLog, EnvironmentReading, Room, FacilityBriefing, CohortAnalysis, ChatContext } from "../types";
 import { PHYTOPATHOLOGIST_INSTRUCTION, FLIP_DATE } from "../constants";
 
@@ -157,7 +157,7 @@ class GeminiService {
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+        model: 'gemgemini-3-pro-preview',
         contents: {
           parts: [{ text: `Telemetry: ${JSON.stringify(roomSummaries)}. Recent Activity: ${JSON.stringify(recentLogs)}. Generate Briefing.` }]
         },
@@ -232,9 +232,14 @@ class GeminiService {
     context: GrowSetup, 
     previousDiagnosis?: AiDiagnosis,
     envData?: EnvironmentReading,
-    breederDays?: number
+    breederDays?: number,
+    currentStage?: string
   ): Promise<AiDiagnosis> {
     const ai = this.ensureClient();
+
+    const envString = envData 
+        ? `Temp: ${envData.temperature}°F, RH: ${envData.humidity}%, PPFD: ${envData.ppfd}` 
+        : 'Telemetry Offline';
 
     const contextAwareSystemInstruction = `
     ${PHYTOPATHOLOGIST_INSTRUCTION}
@@ -246,6 +251,15 @@ class GeminiService {
     - Nutrients: ${context.nutrients}
     - Target VPD: ${context.targetVpd}
 
+    BIOLOGICAL CONTEXT:
+    - Current Stage: ${currentStage || 'Unknown'}
+    - Live Telemetry: ${envString}
+
+    ANALYSIS PROTOCOL:
+    1. Verify plant morphology matches the '${currentStage}' stage.
+    2. Provide specific nutrient recommendations for ${currentStage} (e.g. Nitrogen focus in Veg vs P-K in Flower).
+    3. Evaluate if current environmental conditions (${envString}) are optimal for ${currentStage}.
+
     COMPARATIVE ANALYSIS MODE:
     ${previousDiagnosis 
       ? `PREVIOUS SCAN DATA: Health Score ${previousDiagnosis.healthScore}. Issues: ${previousDiagnosis.detectedPests.join(', ')}.
@@ -255,8 +269,7 @@ class GeminiService {
     
     PREDICTIVE HARVEST LOGIC:
     Baseline: ${breederDays || 63} days. 
-    Environment: ${envData ? `${envData.temperature}°F` : 'Unknown'}.
-    Adjust based on trichome maturity and stress.
+    Adjust based on trichome maturity and stress relative to ${currentStage}.
     `;
 
     const cleanBase64 = base64Image.includes('base64,') ? base64Image.split('base64,')[1] : base64Image;
@@ -376,7 +389,7 @@ class GeminiService {
     ${logHistory}
 
     ### CAPABILITIES
-    1. **Tailored Advice:** Use the specific soil mix (Living Soil vs Salt) for EACH plant when giving advice. Blue is Living Soil (Microbe focused), Green is Hybrid (Salt tolerant).
+    1. **Tailored Advice:** Use the specific soil mix (Living Soil vs Salt) AND growth stage for EACH plant when giving advice.
     2. **Environment Check:** Compare current VPD to stage targets.
     3. **Image Analysis:** If provided an image, analyze it for health, pests, and deficiencies.
     4. **Log Events:** If the user confirms an action (e.g., "I watered Blue"), call the 'proposeLog' tool.
@@ -417,14 +430,14 @@ class GeminiService {
             config: {
                 systemInstruction: systemPrompt,
                 tools: [{ functionDeclarations: [proposeLogTool] }], // EXCLUSIVE: No googleSearch allowed here
-                toolConfig: { functionCallingConfig: { mode: 'AUTO' } }
+                toolConfig: { functionCallingConfig: { mode: FunctionCallingMode.AUTO } }
             }
         });
 
         for await (const chunk of responseStream) {
             // Handle Text
             if (chunk.text) {
-                onChunk(chunk.text, chunk.groundingMetadata);
+                onChunk(chunk.text, chunk.candidates?.[0]?.groundingMetadata);
             }
             
             // Handle Function Calls

@@ -94,7 +94,12 @@ export const App = () => {
     try {
         const processed = await ImageUtils.processImage(file);
         const diagnosis = await geminiService.analyzePlantImage(
-            processed.full, settings, undefined, envReading || undefined, currentBatch?.breederHarvestDays
+            processed.full, 
+            settings, 
+            undefined, 
+            envReading || undefined, 
+            currentBatch?.breederHarvestDays,
+            currentBatch?.currentStage // Pass current stage for context-aware analysis
         );
         setAnalysisData({ diagnosis, image: processed.full, thumbnail: processed.thumbnail });
         Haptic.success();

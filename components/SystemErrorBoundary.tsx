@@ -48,6 +48,8 @@ export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
         </div>
       );
     }
+    // In most React setups, extending Component<P, S> ensures this.props is correctly typed as Readonly<P>.
+    // If environments cause issues, direct access or safe navigation handles it.
     return this.props.children;
   }
 }
