@@ -13,11 +13,6 @@ interface ErrorBoundaryState {
 }
 
 export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false, error: null };
-  
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
   // Explicitly declare props to satisfy strict TypeScript checks
   declare props: Readonly<ErrorBoundaryProps>;
 
@@ -25,8 +20,6 @@ export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
     hasError: false, 
     error: null 
   };
-  
-  // Removed redundant constructor to rely on React.Component initialization
   
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
