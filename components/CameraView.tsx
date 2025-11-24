@@ -192,7 +192,6 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
     return () => {
       isMounted = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      geminiService.stopLiveAnalysis();
       stopArSession();
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
