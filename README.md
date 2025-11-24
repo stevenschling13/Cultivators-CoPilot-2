@@ -45,3 +45,17 @@ Other agents can invoke the same bridge in their workflows by adding an MCP serv
 ```
 
 Agents can then pass prompts as CLI arguments or keep the process interactive; the bridge will initialize, list available tools, and stream outputs so multi-agent runs stay synchronized.
+
+## GitHub MCP Server (Remote or Local)
+
+Use the bundled `.vscode/mcp.json` to light up the GitHub MCP Server in hosts that support remote or local servers. The config adds:
+
+- **Remote (hosted by GitHub):** `type: http` pointed at `https://api.githubcopilot.com/mcp/` with a prompt for your PAT (recommended scopes: `copilot`, `repo`, `read:org` depending on needed toolsets).
+- **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server` reusing the same PAT input; set `GITHUB_HOST` if you target GHES/ghe.com.
+
+Quick start:
+
+1. Create a GitHub Personal Access Token with the scopes you are comfortable granting to MCP tools.
+2. Open VS Code 1.101+ (or another MCP host) and accept the `.vscode/mcp.json` workspace config when prompted.
+3. Toggle Agent mode (VS Code Copilot Chat) to initialize the remote server, or start the local Docker flavor if you prefer running it yourself.
+4. Adjust toolsets via `GITHUB_TOOLSETS` or `--toolsets` when running Docker if you want to narrow available GitHub APIs (e.g., `repos,issues,pull_requests`).
