@@ -1,5 +1,6 @@
+
 import React, { useState, useRef } from 'react';
-import { X, Lock, Download, Upload, FileJson, AlertCircle } from 'lucide-react';
+import { X, Lock, Download, Upload, FileJson, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { Haptic } from '../../utils/haptics';
 
 interface BackupModalProps {
@@ -10,6 +11,7 @@ interface BackupModalProps {
 
 export const BackupModal = ({ mode, onClose, onConfirm }: BackupModalProps) => {
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -62,21 +64,29 @@ export const BackupModal = ({ mode, onClose, onConfirm }: BackupModalProps) => {
           <p className="text-sm text-gray-400 leading-relaxed">
             {mode === 'backup' 
               ? "Create a secure, encrypted archive of your batches, logs, and settings. You must remember this password to restore." 
-              : "Restore your data from a .ccbak file. WARNING: This will overwrite all current app data."}
+              : "Restore your data from a .ccbak file. WARNING: This will merge/overwrite current app data."}
           </p>
 
           <div className="space-y-2">
             <label className="text-xs text-gray-500 uppercase font-mono tracking-wider flex items-center gap-2">
               <Lock className="w-3 h-3" /> Encryption Password
             </label>
-            <input 
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-neon-green focus:outline-none focus:ring-1 focus:ring-neon-green/50 transition-all placeholder-gray-600"
-              placeholder="Enter password..."
-              autoFocus
-            />
+            <div className="relative">
+                <input 
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-neon-green focus:outline-none focus:ring-1 focus:ring-neon-green/50 transition-all placeholder-gray-600 pr-10"
+                placeholder="Enter password..."
+                autoFocus
+                />
+                <button 
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+            </div>
           </div>
 
           {mode === 'restore' && (

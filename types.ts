@@ -1,4 +1,5 @@
 
+
 export enum VpdZone {
   DANGER = 'Danger',
   TRANSPIRATION = 'Transpiration (Healthy)',
@@ -69,6 +70,14 @@ export interface Room {
   metrics: RoomMetrics;
 }
 
+export interface FacilityBriefing {
+  status: 'OPTIMAL' | 'ATTENTION' | 'CRITICAL';
+  summary: string;
+  actionItems: string[];
+  weatherAlert?: string;
+  timestamp?: number; // Track when this briefing was generated
+}
+
 // ----------------------------
 
 export interface HarvestPrediction {
@@ -104,6 +113,71 @@ export interface GrowLog {
   actionType?: 'Water' | 'Feed' | 'Defoliate' | 'Observation' | 'Other' | 'Pest Control' | 'Training' | 'Flush' | string;
 }
 
+// --- RESEARCH TYPES ---
+
+export interface CohortAnalysis {
+  trendSummary: string;
+  dominantIssue?: string;
+  topPerformingStrain?: string;
+  recommendedAction: string;
+}
+
+// --- ERROR HANDLING TYPES ---
+
+export type ErrorSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface Breadcrumb {
+  timestamp: number;
+  category: 'ui' | 'nav' | 'api' | 'system';
+  message: string;
+  data?: any;
+}
+
+export interface AppError {
+  id: string;
+  timestamp: number;
+  message: string;
+  stack?: string;
+  componentStack?: string;
+  severity: ErrorSeverity;
+  breadcrumbs: Breadcrumb[];
+  metadata?: any;
+  resolved: boolean;
+}
+
+// --- AR & GROUNDING TYPES ---
+
+export interface ArOverlayData {
+  status?: string;
+  colaCount?: number;
+  biomassEstimate?: string;
+  healthStatus?: string;
+  criticalWarning?: string;
+}
+
+export interface GroundingChunk {
+  web?: {
+    uri: string;
+    title: string;
+  };
+}
+
+export interface GroundingMetadata {
+  groundingChunks?: GroundingChunk[];
+}
+
+// ----------------------
+
+export interface LogProposal {
+  manualNotes: string;
+  actionType: string;
+  healthScore?: number;
+  detectedPests?: string[];
+  nutrientDeficiencies?: string[];
+  currentStage?: string;
+  recommendations?: string[];
+}
+
 export interface ChatAttachment {
   type: 'image' | 'file';
   url: string; // Base64 or URL
@@ -118,7 +192,13 @@ export interface ChatMessage {
   isThinking?: boolean;
   groundingUrls?: { uri: string; title: string }[];
   attachment?: ChatAttachment;
-  toolCallPayload?: Partial<GrowLog>; // Data returned by a tool call for UI rendering
+  toolCallPayload?: LogProposal; // Data returned by a tool call for UI rendering
+}
+
+export interface ArPreferences {
+  showColaCount: boolean;
+  showBiomass: boolean;
+  showHealth: boolean;
 }
 
 export interface GrowSetup {
@@ -129,6 +209,15 @@ export interface GrowSetup {
   targetVpd: string;
   vpdNotifications?: boolean;
   lastConnectedDeviceId?: string;
+  arPreferences?: ArPreferences;
+}
+
+export interface ChatContext {
+  setup: GrowSetup;
+  environment?: EnvironmentReading;
+  batches: PlantBatch[];
+  recentLogs: GrowLog[];
+  metrics?: CalculatedMetrics;
 }
 
 export type AspectRatio = "1:1" | "3:4" | "4:3" | "9:16" | "16:9";

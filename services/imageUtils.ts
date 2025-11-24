@@ -1,4 +1,7 @@
 
+
+import { errorService } from './errorService';
+
 /**
  * ImageUtils: Professional Image Processing Pipeline
  * Optimized for iPhone 16 Pro 48MP Assets.
@@ -21,19 +24,25 @@ export class ImageUtils {
    * Uses OffscreenCanvas if available to unblock Main Thread.
    */
   public static async processImage(file: File): Promise<ProcessedImage> {
-    const bitmap = await createImageBitmap(file);
-    const { width, height } = this.calculateDimensions(bitmap.width, bitmap.height, this.MAX_DIMENSION);
-    
-    // Use OffscreenCanvas if available for performance
-    if (typeof OffscreenCanvas !== 'undefined') {
-      try {
-        return await this.processOffscreen(bitmap, width, height);
-      } catch (e) {
-        console.warn("OffscreenCanvas failed, falling back to main thread", e);
-      }
-    }
+    try {
+        const bitmap = await createImageBitmap(file);
+        const { width, height } = this.calculateDimensions(bitmap.width, bitmap.height, this.MAX_DIMENSION);
+        
+        // Use OffscreenCanvas if available for performance
+        if (typeof OffscreenCanvas !== 'undefined') {
+        try {
+            return await this.processOffscreen(bitmap, width, height);
+        } catch (e) {
+            console.warn("OffscreenCanvas failed, falling back to main thread", e);
+            errorService.addBreadcrumb('system', 'OffscreenCanvas fallback');
+        }
+        }
 
-    return this.processMainThread(bitmap, width, height);
+        return this.processMainThread(bitmap, width, height);
+    } catch (e) {
+        errorService.captureError(e as Error, { severity: 'HIGH', metadata: { context: 'ImageProcessing', fileSize: file.size } });
+        throw e;
+    }
   }
 
   /**
@@ -60,6 +69,10 @@ export class ImageUtils {
 
         this.drawCenterCrop(ctx, img, img.width, img.height, this.THUMBNAIL_SIZE);
         resolve(canvas.toDataURL('image/webp', 0.5));
+      };
+      img.onerror = (e) => {
+         errorService.captureError(new Error("Thumbnail Generation Failed"), { severity: 'LOW' });
+         reject(e);
       };
       img.src = base64Image;
     });
@@ -217,6 +230,7 @@ export class ImageUtils {
 
         recorder.stop();
       } catch (e) {
+        errorService.captureError(e as Error, { severity: 'MEDIUM', metadata: { context: 'TimeLapseGen' } });
         reject(new Error(`MediaRecorder failed: ${e}`));
       }
     });

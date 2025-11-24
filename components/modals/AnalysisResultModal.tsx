@@ -1,7 +1,7 @@
-
 import React, { memo } from 'react';
 import { Play } from 'lucide-react';
 import { AiDiagnosis, GrowLog } from '../../types';
+import { Haptic } from '../../utils/haptics';
 
 interface AnalysisResultModalProps {
   result: AiDiagnosis;
@@ -38,7 +38,12 @@ export const AnalysisResultModal = memo(({ result, log, onSave, onDiscard, onSim
           </div>
 
           <button 
-             onClick={() => log.imageUrl && onSimulate(log.imageUrl)}
+             onClick={() => {
+                if (log.imageUrl) {
+                    Haptic.tap();
+                    onSimulate(log.imageUrl);
+                }
+             }}
              className="w-full py-4 bg-gradient-to-r from-uv-purple/20 to-neon-blue/20 border border-uv-purple/30 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all group"
           >
               <Play className="w-5 h-5 text-uv-purple group-hover:text-white transition-colors" />
@@ -63,8 +68,8 @@ export const AnalysisResultModal = memo(({ result, log, onSave, onDiscard, onSim
        </div>
 
        <div className="p-6 bg-[#0A0A0A] border-t border-white/10 flex gap-4">
-          <button onClick={onDiscard} className="flex-1 py-4 rounded-xl bg-white/5 text-white font-medium active:scale-95 transition-all">Discard</button>
-          <button onClick={onSave} className="flex-1 py-4 rounded-xl bg-neon-green text-black font-bold active:scale-95 transition-all shadow-[0_0_20px_rgba(0,255,163,0.3)]">Save to Log</button>
+          <button onClick={() => { Haptic.tap(); onDiscard(); }} className="flex-1 py-4 rounded-xl bg-white/5 text-white font-medium active:scale-95 transition-all">Discard</button>
+          <button onClick={() => { Haptic.tap(); onSave(); }} className="flex-1 py-4 rounded-xl bg-neon-green text-black font-bold active:scale-95 transition-all shadow-[0_0_20px_rgba(0,255,163,0.3)]">Save to Log</button>
        </div>
     </div>
   );

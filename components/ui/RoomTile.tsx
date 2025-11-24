@@ -3,7 +3,7 @@ import React, { memo } from 'react';
 import { Haptic } from '../../utils/haptics';
 import { Room } from '../../types';
 import { TrendSparkline } from './Primitives';
-import { Thermometer, Droplet, WifiOff } from 'lucide-react';
+import { Thermometer, Droplet, WifiOff, Sprout, Activity } from 'lucide-react';
 
 interface RoomTileProps {
   room: Room;
@@ -15,30 +15,33 @@ export const RoomTile = memo(({ room, onClick }: RoomTileProps) => {
   
   // Determine Theme based on Status
   let borderColor = 'border-white/5';
-  let glowColor = '';
   let statusColor = 'text-white';
-  let bgGradient = 'from-[#0F0F0F] to-[#0F0F0F]';
+  let bgClass = 'bg-[#080808]';
+  let ledColor = 'bg-gray-600';
 
   switch (metrics.status) {
     case 'CRITICAL':
-      borderColor = 'border-alert-red';
-      glowColor = 'shadow-[0_0_15px_rgba(255,0,85,0.3)]';
+      borderColor = 'border-alert-red/50';
       statusColor = 'text-alert-red';
-      bgGradient = 'from-alert-red/10 to-[#0F0F0F]';
+      bgClass = 'bg-alert-red/5';
+      ledColor = 'bg-alert-red shadow-[0_0_8px_#ff0055]';
       break;
     case 'WARNING':
-      borderColor = 'border-yellow-500';
+      borderColor = 'border-yellow-500/50';
       statusColor = 'text-yellow-500';
-      glowColor = 'shadow-[0_0_10px_rgba(234,179,8,0.2)]';
+      bgClass = 'bg-yellow-500/5';
+      ledColor = 'bg-yellow-500 shadow-[0_0_8px_#eab308]';
       break;
     case 'OFFLINE':
-      borderColor = 'border-gray-700';
+      borderColor = 'border-gray-800';
       statusColor = 'text-gray-500';
+      ledColor = 'bg-gray-700';
       break;
     case 'NOMINAL':
     default:
       borderColor = 'border-white/10';
       statusColor = 'text-neon-green';
+      ledColor = 'bg-neon-green shadow-[0_0_8px_#00ffa3]';
       break;
   }
 
@@ -48,59 +51,72 @@ export const RoomTile = memo(({ room, onClick }: RoomTileProps) => {
     <button
       onClick={() => { Haptic.tap(); onClick(room); }}
       className={`
-        relative w-full aspect-[1/1.1] rounded-3xl p-4 flex flex-col justify-between
-        bg-gradient-to-b ${bgGradient} border ${borderColor} ${glowColor}
+        relative w-full aspect-square rounded-[24px] p-5 flex flex-col justify-between
+        ${bgClass} border ${borderColor}
         transition-all duration-300 active:scale-[0.98] overflow-hidden group
-        ${isOffline ? 'opacity-60' : ''}
+        hover:border-white/20
       `}
     >
-      {/* Header: Name & Stage */}
+      {/* Scanline Effect */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,18,18,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-0 bg-[length:100%_2px,3px_100%] pointer-events-none opacity-20"></div>
+      
+      {/* Noise */}
+      <div className="absolute inset-0 bg-noise opacity-30 pointer-events-none mix-blend-overlay"></div>
+
+      {/* Header */}
       <div className="w-full flex justify-between items-start z-10">
-        <div className="text-left">
-          <div className="text-white font-bold text-sm leading-tight line-clamp-1">{room.name}</div>
-          <div className="text-[10px] font-mono text-gray-400 uppercase mt-0.5">
-            {room.stage} · Day {room.stageDay}
+        <div className="text-left max-w-[80%]">
+          <div className="text-white font-bold text-sm leading-tight line-clamp-1 flex items-center gap-2">
+             <span className="font-mono tracking-tighter text-[9px] text-gray-500 bg-white/5 px-1 rounded">RM.01</span>
+             {room.name}
+          </div>
+          <div className="text-[9px] font-mono text-gray-400 uppercase mt-1.5 flex items-center gap-1.5">
+             <div className="flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                <Sprout className="w-3 h-3 text-neon-green" /> 
+                <span className="text-white font-bold">DAY {room.stageDay}</span>
+             </div>
+             <span className="opacity-50">{room.stage}</span>
           </div>
         </div>
         
         {isOffline ? (
-           <WifiOff className="w-4 h-4 text-gray-500" />
+           <WifiOff className="w-4 h-4 text-gray-600" />
         ) : (
-           <div className={`w-2 h-2 rounded-full ${metrics.status === 'NOMINAL' ? 'bg-neon-green' : metrics.status === 'WARNING' ? 'bg-yellow-500' : 'bg-alert-red'} animate-pulse`} />
+           <div className={`w-2 h-2 rounded-full ${ledColor} animate-pulse`} />
         )}
       </div>
 
       {/* Primary Metric: VPD */}
-      <div className="z-10 mt-2">
-         <div className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-1">VPD (kPa)</div>
-         <div className={`text-3xl font-bold tracking-tighter ${statusColor}`}>
+      <div className="z-10 flex flex-col items-start my-auto py-2">
+         <div className="text-[9px] text-gray-500 font-mono uppercase tracking-widest mb-0.5">Vapor Pressure Deficit</div>
+         <div className={`text-4xl font-bold tracking-tighter font-mono ${statusColor} drop-shadow-sm`}>
             {isOffline ? '--' : metrics.vpd.toFixed(2)}
+            <span className="text-xs font-medium text-gray-500 ml-1 font-sans opacity-70">kPa</span>
          </div>
       </div>
 
       {/* Secondary Metrics Grid */}
-      <div className="grid grid-cols-2 gap-2 z-10 mt-1">
-         <div className="flex flex-col">
-             <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                <Thermometer className="w-3 h-3" /> Temp
-             </div>
-             <div className="text-sm font-medium text-gray-200">{isOffline ? '--' : metrics.temp}°</div>
+      <div className="flex items-center gap-4 z-10 relative">
+         <div className="flex items-center gap-1.5">
+             <Thermometer className="w-3 h-3 text-gray-500" />
+             <span className="text-xs font-mono font-bold text-gray-300">{isOffline ? '--' : metrics.temp.toFixed(0)}°</span>
          </div>
-         <div className="flex flex-col">
-             <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                <Droplet className="w-3 h-3" /> RH
-             </div>
-             <div className="text-sm font-medium text-gray-200">{isOffline ? '--' : metrics.rh}%</div>
+         <div className="w-px h-3 bg-white/10"></div>
+         <div className="flex items-center gap-1.5">
+             <Droplet className="w-3 h-3 text-gray-500" />
+             <span className="text-xs font-mono font-bold text-gray-300">{isOffline ? '--' : metrics.rh.toFixed(0)}%</span>
+         </div>
+         <div className="w-px h-3 bg-white/10"></div>
+         <div className="flex items-center gap-1.5">
+             <Activity className="w-3 h-3 text-gray-500" />
+             <span className="text-xs font-mono font-bold text-gray-300">{isOffline ? '--' : metrics.co2}</span>
          </div>
       </div>
 
-      {/* Bottom: Sparkline */}
-      <div className="absolute bottom-0 left-0 right-0 h-16 opacity-30 pointer-events-none">
+      {/* Sparkline Background */}
+      <div className="absolute bottom-0 left-0 right-0 h-28 opacity-20 pointer-events-none mix-blend-screen mask-image-gradient">
          <TrendSparkline data={metrics.history} />
       </div>
-      
-      {/* Glassy shine effect */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
     </button>
   );
 });
