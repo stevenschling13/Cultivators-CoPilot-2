@@ -75,6 +75,7 @@ export interface FacilityBriefing {
   summary: string;
   actionItems: string[];
   weatherAlert?: string;
+  timestamp?: number; // Track when this briefing was generated
 }
 
 // ----------------------------
@@ -121,7 +122,61 @@ export interface CohortAnalysis {
   recommendedAction: string;
 }
 
+// --- ERROR HANDLING TYPES ---
+
+export type ErrorSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface Breadcrumb {
+  timestamp: number;
+  category: 'ui' | 'nav' | 'api' | 'system';
+  message: string;
+  data?: any;
+}
+
+export interface AppError {
+  id: string;
+  timestamp: number;
+  message: string;
+  stack?: string;
+  componentStack?: string;
+  severity: ErrorSeverity;
+  breadcrumbs: Breadcrumb[];
+  metadata?: any;
+  resolved: boolean;
+}
+
+// --- AR & GROUNDING TYPES ---
+
+export interface ArOverlayData {
+  status?: string;
+  colaCount?: number;
+  biomassEstimate?: string;
+  healthStatus?: string;
+  criticalWarning?: string;
+}
+
+export interface GroundingChunk {
+  web?: {
+    uri: string;
+    title: string;
+  };
+}
+
+export interface GroundingMetadata {
+  groundingChunks?: GroundingChunk[];
+}
+
 // ----------------------
+
+export interface LogProposal {
+  manualNotes: string;
+  actionType: string;
+  healthScore?: number;
+  detectedPests?: string[];
+  nutrientDeficiencies?: string[];
+  currentStage?: string;
+  recommendations?: string[];
+}
 
 export interface ChatAttachment {
   type: 'image' | 'file';
@@ -137,7 +192,13 @@ export interface ChatMessage {
   isThinking?: boolean;
   groundingUrls?: { uri: string; title: string }[];
   attachment?: ChatAttachment;
-  toolCallPayload?: Partial<GrowLog>; // Data returned by a tool call for UI rendering
+  toolCallPayload?: LogProposal; // Data returned by a tool call for UI rendering
+}
+
+export interface ArPreferences {
+  showColaCount: boolean;
+  showBiomass: boolean;
+  showHealth: boolean;
 }
 
 export interface GrowSetup {
@@ -148,6 +209,7 @@ export interface GrowSetup {
   targetVpd: string;
   vpdNotifications?: boolean;
   lastConnectedDeviceId?: string;
+  arPreferences?: ArPreferences;
 }
 
 export interface ChatContext {

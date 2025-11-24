@@ -1,10 +1,10 @@
 
 
-
 import { SensorDevice, EnvironmentReading, VpdZone } from '../types';
 import { EnvironmentService } from './environmentService';
+import { errorService } from './errorService';
 
-type SensorCallback = (reading: EnvironmentReading) => void;
+type SensorCallback = (deviceId: string, reading: EnvironmentReading) => void;
 type Unsubscribe = () => void;
 
 /**
@@ -13,7 +13,8 @@ type Unsubscribe = () => void;
  * Implements VPD Auto-Pilot for push notifications.
  */
 export class HardwareService {
-  private connectedDevice: SensorDevice | null = null;
+  // Track multiple connected devices by ID
+  private connectedDevices: Map<string, SensorDevice> = new Map();
   private listeners: SensorCallback[] = [];
   private simulationInterval: any = null;
   private notificationsEnabled: boolean = true;
@@ -21,6 +22,10 @@ export class HardwareService {
   // Notification Throttling
   private lastNotificationTime = 0;
   private readonly NOTIFICATION_COOLDOWN = 30 * 60 * 1000; // 30 minutes
+  
+  // Error Throttling
+  private lastErrorTime = 0;
+  private readonly ERROR_COOLDOWN = 60 * 1000; // 1 minute to prevent spamming logs
 
   // Mock known devices for the simulation
   private mockDevices: SensorDevice[] = [
@@ -32,37 +37,58 @@ export class HardwareService {
    * Simulates scanning for BLE devices (e.g. Web Bluetooth API)
    */
   public async scanForDevices(): Promise<SensorDevice[]> {
+    errorService.addBreadcrumb('system', 'Scanning for BLE Devices');
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve(this.mockDevices);
-      }, 1500);
+      }, 500); // Fast scan for UX
     });
   }
 
   /**
-   * Connects to a specific device and starts the data stream
+   * Connects to a specific device and starts the data stream for it
    */
   public async connectToDevice(deviceId: string): Promise<boolean> {
     const device = this.mockDevices.find(d => d.id === deviceId);
     if (device) {
-      this.connectedDevice = { ...device, isConnected: true };
-      this.startDataStream();
+      // Add to connected set
+      this.connectedDevices.set(deviceId, { ...device, isConnected: true });
+      errorService.addBreadcrumb('system', `Connected to Device: ${device.name}`);
+      
+      // Ensure stream is running if this is the first device
+      if (!this.simulationInterval) {
+        this.startDataStream();
+      }
       return true;
     }
+    
+    // Log failure
+    errorService.captureError(new Error(`Device Connection Failed: ${deviceId}`), { severity: 'LOW' });
     return false;
   }
 
-  public disconnect() {
-    this.connectedDevice = null;
-    if (this.simulationInterval) clearInterval(this.simulationInterval);
+  public disconnect(deviceId?: string) {
+    if (deviceId) {
+      this.connectedDevices.delete(deviceId);
+      errorService.addBreadcrumb('system', `Disconnected Device: ${deviceId}`);
+    } else {
+      this.connectedDevices.clear();
+      errorService.addBreadcrumb('system', `Disconnected All Devices`);
+    }
+    
+    if (this.connectedDevices.size === 0 && this.simulationInterval) {
+      clearInterval(this.simulationInterval);
+      this.simulationInterval = null;
+    }
   }
 
-  public getConnectedDevice(): SensorDevice | null {
-    return this.connectedDevice;
+  public getConnectedDevices(): SensorDevice[] {
+    return Array.from(this.connectedDevices.values());
   }
 
   /**
    * Subscribes to sensor readings. Returns an unsubscribe function.
+   * Callback now includes deviceId to distinguish sources.
    */
   public onReading(callback: SensorCallback): Unsubscribe {
     this.listeners.push(callback);
@@ -85,34 +111,62 @@ export class HardwareService {
   private startDataStream() {
     if (this.simulationInterval) clearInterval(this.simulationInterval);
     
-    // Simulate 1-minute hardware polling
+    // Simulate hardware polling
     this.simulationInterval = setInterval(() => {
-      if (!this.connectedDevice) return;
+      if (this.connectedDevices.size === 0) return;
 
-      // Simulate realistic sensor drift
-      const temp = 75 + (Math.random() * 4 - 2); // 73-77F
-      const hum = 50 + (Math.random() * 10 - 5); // 45-55%
-      
-      const reading: EnvironmentReading = {
-        temperature: temp,
-        humidity: hum,
-        ppfd: 850 + (Math.random() * 20 - 10),
-        co2: 420,
-        timestamp: Date.now()
-      };
+      const now = Date.now();
 
-      this.connectedDevice.lastReading = reading;
-      
-      // Broadcast to app
-      this.listeners.forEach(cb => cb(reading));
+      // Iterate through ALL connected devices and emit independent readings
+      this.connectedDevices.forEach((device) => {
+        try {
+            // Create distinct microclimates based on device type
+            let tempBase = 75;
+            let humBase = 50;
 
-      // VPD Auto-Pilot Check
-      this.checkVpdSafety(reading);
+            if (device.type === 'Govee') {
+            // Garage environment: Slightly cooler, higher fluctuation
+            tempBase = 72; 
+            humBase = 45;
+            } else if (device.type === 'SensorPush') {
+            // Tent environment: Warmer, more humid (transpiration)
+            tempBase = 78;
+            humBase = 55;
+            }
 
-    }, 5000); // 5 seconds for demo purposes (would be 60s in prod)
+            // Simulate realistic sensor jitter/drift
+            const temp = tempBase + (Math.random() * 3 - 1.5);
+            const hum = humBase + (Math.random() * 6 - 3);
+            
+            const reading: EnvironmentReading = {
+            temperature: temp,
+            humidity: hum,
+            ppfd: 850 + (Math.random() * 20 - 10),
+            co2: 420 + (Math.random() * 50 - 25),
+            timestamp: now
+            };
+
+            // Update local state
+            device.lastReading = reading;
+            
+            // Broadcast to app
+            this.listeners.forEach(cb => cb(device.id, reading));
+
+            // VPD Auto-Pilot Check (Global)
+            this.checkVpdSafety(reading, device.name);
+        } catch (e) {
+            // Throttle error logging for high-frequency loops
+            if (now - this.lastErrorTime > this.ERROR_COOLDOWN) {
+                errorService.captureError(e as Error, { severity: 'MEDIUM', metadata: { context: 'SensorLoop', device: device.name } });
+                this.lastErrorTime = now;
+            }
+        }
+      });
+
+    }, 3000); // 3 seconds refresh rate for "Live" feel
   }
 
-  private checkVpdSafety(reading: EnvironmentReading) {
+  private checkVpdSafety(reading: EnvironmentReading, sourceName: string) {
     if (!this.notificationsEnabled) return;
 
     const metrics = EnvironmentService.processReading(reading);
@@ -123,8 +177,8 @@ export class HardwareService {
 
     if (metrics.vpdStatus === VpdZone.DANGER || metrics.vpdStatus === VpdZone.LEECHING) {
       this.triggerNotification(
-        `CRITICAL VPD ALERT: ${metrics.vpd} kPa`, 
-        `Environment is drifting into ${metrics.vpdStatus}. Check equipment immediately.`
+        `CRITICAL VPD (${sourceName})`, 
+        `${metrics.vpd.toFixed(2)} kPa - Environment is drifting into ${metrics.vpdStatus}.`
       );
       this.lastNotificationTime = now;
     }
@@ -134,7 +188,6 @@ export class HardwareService {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, { body, icon: '/favicon.ico' });
     } else {
-      // Reduced noise for unpermitted notifications to prevent build warnings
       console.debug("Notification skipped:", title);
     }
   }

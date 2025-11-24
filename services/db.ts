@@ -1,6 +1,7 @@
 
+
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { PlantBatch, GrowLog, GrowSetup } from '../types';
+import { PlantBatch, GrowLog, GrowSetup, AppError } from '../types';
 import { MOCK_BATCHES, DEFAULT_GROW_SETUP } from '../constants';
 
 interface CultivatorDB extends DBSchema {
@@ -20,6 +21,14 @@ interface CultivatorDB extends DBSchema {
     key: string;
     value: GrowSetup;
   };
+  sys_errors: {
+    key: string;
+    value: AppError;
+    indexes: {
+      'by-timestamp': number;
+      'by-severity': string;
+    };
+  };
 }
 
 class DbService {
@@ -27,20 +36,31 @@ class DbService {
   private readyPromise: Promise<void>;
 
   constructor() {
-    this.dbPromise = openDB<CultivatorDB>('cultivator-db', 3, { 
+    this.dbPromise = openDB<CultivatorDB>('cultivator-db', 4, { 
       upgrade(db, oldVersion, newVersion, transaction) {
         // Reset stores for V3 to ensure custom data seeding applies cleanly
-        if (db.objectStoreNames.contains('batches')) db.deleteObjectStore('batches');
-        if (db.objectStoreNames.contains('logs')) db.deleteObjectStore('logs');
-        if (db.objectStoreNames.contains('settings')) db.deleteObjectStore('settings');
+        if (oldVersion < 3) {
+            if (db.objectStoreNames.contains('batches')) db.deleteObjectStore('batches');
+            if (db.objectStoreNames.contains('logs')) db.deleteObjectStore('logs');
+            if (db.objectStoreNames.contains('settings')) db.deleteObjectStore('settings');
 
-        db.createObjectStore('batches', { keyPath: 'id' });
-        
-        const logStore = db.createObjectStore('logs', { keyPath: 'id' });
-        logStore.createIndex('by-batch', 'plantBatchId');
-        logStore.createIndex('by-timestamp', 'timestamp');
+            db.createObjectStore('batches', { keyPath: 'id' });
+            
+            const logStore = db.createObjectStore('logs', { keyPath: 'id' });
+            logStore.createIndex('by-batch', 'plantBatchId');
+            logStore.createIndex('by-timestamp', 'timestamp');
 
-        db.createObjectStore('settings');
+            db.createObjectStore('settings');
+        }
+
+        // Version 4: Error Logging
+        if (oldVersion < 4) {
+           if (!db.objectStoreNames.contains('sys_errors')) {
+               const errorStore = db.createObjectStore('sys_errors', { keyPath: 'id' });
+               errorStore.createIndex('by-timestamp', 'timestamp');
+               errorStore.createIndex('by-severity', 'severity');
+           }
+        }
       },
     });
     this.readyPromise = this.seedDefaults();
@@ -207,6 +227,26 @@ class DbService {
     await this.readyPromise;
     const db = await this.dbPromise;
     await db.put('settings', settings, 'main');
+  }
+
+  // --- Error Logging ---
+  public async logError(error: AppError) {
+    try {
+        // Don't wait for readyPromise to avoid loops if init fails
+        const db = await this.dbPromise;
+        await db.put('sys_errors', error);
+    } catch (e) {
+        // Fallback to console if DB write fails (catastrophic failure)
+        console.error("Critical: Failed to log error to DB", e);
+    }
+  }
+
+  public async getRecentErrors(limit = 50): Promise<AppError[]> {
+      await this.readyPromise;
+      const db = await this.dbPromise;
+      // Get all and sort manual since IDB index traversal is verbose for simple limits
+      const all = await db.getAll('sys_errors');
+      return all.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
   }
 }
 

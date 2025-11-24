@@ -44,7 +44,12 @@ export const DEFAULT_GROW_SETUP: GrowSetup = {
   medium: 'BuildASoil UCCR (Blue) / UCCR+FFOF (Green)',
   nutrients: 'Advanced Nutrients pH Perfect + Big Bud/Bud Candy',
   targetVpd: '1.2 - 1.5 kPa',
-  vpdNotifications: true
+  vpdNotifications: true,
+  arPreferences: {
+    showColaCount: true,
+    showBiomass: true,
+    showHealth: true
+  }
 };
 
 export const STAGE_INFO: Record<string, { temp: string, rh: string, vpd: string, ppfd: string, desc: string }> = {

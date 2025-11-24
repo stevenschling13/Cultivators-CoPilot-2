@@ -1,16 +1,24 @@
 import React from 'react';
-import { GrowLog } from '../../types';
+import { LogProposal } from '../../types';
 import { Activity, AlertTriangle, Bug, CheckCircle2, PlusCircle, Leaf } from 'lucide-react';
 import { Haptic } from '../../utils/haptics';
 
 interface AnalysisCardProps {
-  data: Partial<GrowLog>;
+  data: LogProposal;
   onSave: () => void;
 }
 
 export const AnalysisCard = ({ data, onSave }: AnalysisCardProps) => {
-  const diagnosis = data.aiDiagnosis;
-  if (!diagnosis) return null;
+  if (!data) return null;
+
+  // Construct a pseudo-diagnosis object for consistent rendering with LogProposal flat structure
+  const diagnosis = {
+    healthScore: data.healthScore,
+    detectedPests: data.detectedPests,
+    nutrientDeficiencies: data.nutrientDeficiencies,
+    recommendations: data.recommendations,
+    morphologyNotes: data.manualNotes
+  };
 
   const isHealthy = diagnosis.healthScore && diagnosis.healthScore > 80;
   const healthColor = isHealthy ? 'text-neon-green' : diagnosis.healthScore && diagnosis.healthScore > 60 ? 'text-yellow-500' : 'text-alert-red';
@@ -32,7 +40,7 @@ export const AnalysisCard = ({ data, onSave }: AnalysisCardProps) => {
         
         {/* Summary Notes */}
         <p className="text-sm text-gray-300 leading-relaxed">
-           {data.manualNotes || diagnosis.morphologyNotes}
+           {diagnosis.morphologyNotes}
         </p>
 
         {/* Risks Grid */}
