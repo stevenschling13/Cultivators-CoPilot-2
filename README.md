@@ -102,7 +102,7 @@ Use GitHub Copilot directly from the terminal to stay aligned with the MCP bridg
 Use the bundled `cloudbuild.yaml` for a simple CI flow in Google Cloud Build. To recreate the trigger referenced in the project brief:
 
 1. **Trigger type:** Push to a branch (2nd gen, GitHub App repository).
-2. **Repository:** `stevenschling13/Cultivators-CoPilot-2` with branch regex `^main$` (no inversion).
+2. **Repository:** `<username>/<repository>` with branch regex `^main$` (no inversion).
 3. **Location:** Region `global`.
 4. **Configuration:** Use the repo-stored `cloudbuild.yaml` at the repository root.
 5. **Service account:** For security, create a dedicated service account with least-privilege permissions (e.g., `roles/cloudbuild.builds.builder`) and grant it to your trigger. Avoid using the default Compute Engine service account.
