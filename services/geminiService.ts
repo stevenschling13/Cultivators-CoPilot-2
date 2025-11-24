@@ -135,7 +135,7 @@ class GeminiService {
       ? (import.meta as { env?: Record<string, string> }).env
       : undefined);
 
-    const browserKey = viteEnv?.VITE_GEMINI_API_KEY ?? viteEnv?.GEMINI_API_KEY;
+    const browserKey = viteEnv?.VITE_GEMINI_API_KEY;
     const serverKey = typeof process !== 'undefined'
       ? process.env.GEMINI_API_KEY ?? process.env.VITE_GEMINI_API_KEY
       : undefined;
