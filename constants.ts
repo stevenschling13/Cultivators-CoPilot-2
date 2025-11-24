@@ -67,7 +67,7 @@ export const MOCK_BATCHES: PlantBatch[] = [
     strain: "The Krux × Grandpa's Cookies #6",
     soilMix: '100% BuildASoil UCCR (Living Soil)',
     startDate: new Date('2025-08-02').getTime(),
-    currentStage: 'Flowering',
+    currentStage: GrowStage.FLOWER,
     notes: 'Blue Pheno. Slow start, stout/bushy structure. 8-top manifold. Dark green foliage. Showing mild N fade (expected).',
     projectedHarvestDate: new Date('2025-11-23').getTime(), // based on timeline
     breederHarvestDays: 63
@@ -78,7 +78,7 @@ export const MOCK_BATCHES: PlantBatch[] = [
     strain: "The Krux × Grandpa's Cookies #6",
     soilMix: '50% UCCR / 50% FFOF',
     startDate: new Date('2025-08-02').getTime(),
-    currentStage: 'Flowering',
+    currentStage: GrowStage.FLOWER,
     notes: 'Green Pheno. Vigorous vertical growth. Needs heavier feed/Cal-Mag. Mild Mg deficiency visible mid-flower.',
     projectedHarvestDate: new Date('2025-11-23').getTime(),
     breederHarvestDays: 63
