@@ -1,5 +1,5 @@
 
-import React, { memo, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { X, ZoomIn, Sliders, Scan, Target, Check, Activity, Leaf, Hash, RefreshCw, AlertCircle, Mic, MicOff } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { Haptic } from '../utils/haptics';
@@ -21,14 +21,15 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  
+
   const [arMode, setArMode] = useState(false);
   const [arData, setArData] = useState<ArOverlayData | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
-  
+
   const rafRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
+  const arActiveRef = useRef(false);
 
   const [zoom, setZoom] = useState(1);
   const [flashTrigger, setFlashTrigger] = useState(false);
@@ -52,46 +53,6 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
     onUpdatePreferences(localPrefs);
     setShowSettings(false);
   };
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const startCamera = async () => {
-      try {
-        // Request Audio and Video
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment', width: { ideal: 4096 }, height: { ideal: 2160 } },
-          audio: true // Important for Live Conversation
-        });
-
-        mediaStreamRef.current = stream;
-
-        if (isMounted && videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.volume = 0; // Avoid feedback loop from local playback
-        } else {
-          stream.getTracks().forEach(track => track.stop());
-        }
-      } catch (err) {
-        console.error("Camera access denied", err);
-      }
-    };
-
-    startCamera();
-    
-    if (autoStartAr) {
-        setTimeout(() => startArSession(), 800);
-    }
-
-    return () => {
-      isMounted = false;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      geminiService.stopLiveAnalysis();
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
 
   const toggleMic = () => {
      Haptic.tap();
@@ -125,14 +86,15 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
     }
   };
 
-  const stopArSession = () => {
+  const stopArSession = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     geminiService.stopLiveAnalysis();
     setArMode(false);
     setArData(null);
-  };
+    arActiveRef.current = false;
+  }, []);
 
-  const processArFrame = (timestamp: number) => {
+  const processArFrame = useCallback((timestamp: number) => {
     if (!videoRef.current || !canvasRef.current) {
         rafRef.current = requestAnimationFrame(processArFrame);
         return;
@@ -159,13 +121,14 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
     }
 
     rafRef.current = requestAnimationFrame(processArFrame);
-  };
+  }, []);
 
-  const startArSession = async () => {
+  const startArSession = useCallback(async () => {
     setArMode(true);
     setArData({ status: "CONNECTING..." });
     Haptic.light();
-    
+    arActiveRef.current = true;
+
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
     try {
@@ -182,10 +145,10 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
         },
         () => {
             console.log("AR Session Closed Remotely");
-            if (arMode) stopArSession();
+            if (arActiveRef.current) stopArSession();
         }
       );
-      
+
       lastFrameTimeRef.current = 0;
       rafRef.current = requestAnimationFrame(processArFrame);
 
@@ -194,7 +157,48 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
       setArData({ status: "INIT FAILED" });
       Haptic.error();
     }
-  };
+  }, [processArFrame, stopArSession]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const startCamera = async () => {
+      try {
+        // Request Audio and Video
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 4096 }, height: { ideal: 2160 } },
+          audio: true // Important for Live Conversation
+        });
+
+        mediaStreamRef.current = stream;
+
+        if (isMounted && videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.volume = 0; // Avoid feedback loop from local playback
+        } else {
+          stream.getTracks().forEach(track => track.stop());
+        }
+      } catch (err) {
+        console.error("Camera access denied", err);
+      }
+    };
+
+    startCamera();
+
+    if (autoStartAr) {
+        setTimeout(() => startArSession(), 800);
+    }
+
+    return () => {
+      isMounted = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      geminiService.stopLiveAnalysis();
+      stopArSession();
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [autoStartAr, startArSession, stopArSession]);
 
   const takePhoto = () => {
     if (videoRef.current && canvasRef.current) {
