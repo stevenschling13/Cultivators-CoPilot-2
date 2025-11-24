@@ -1,25 +1,3 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback
-} from 'react';
-import { 
-  Settings,
-  Scan,
-  MessageCircle,
-  LayoutDashboard,
-  Droplet,
-  Wind,
-  Thermometer,
-  Plus,
-  Download,
-  Upload
-} from 'lucide-react';
-
-// Services
-
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Settings, Scan, MessageCircle, LayoutDashboard, Droplet, Wind, Thermometer, Plus, Download, Upload, FlaskConical, Zap, CheckCircle2, AlertTriangle, Leaf, Activity, ArrowLeft, Sprout, Fan, ScanEye, RefreshCw, Clock } from 'lucide-react';
 import { EnvironmentService } from './services/environmentService';
@@ -29,7 +7,7 @@ import { ImageUtils } from './services/imageUtils';
 import { hardwareService } from './services/hardwareService';
 import { BackupService } from './services/backupService';
 import { errorService } from './services/errorService'; // New Import
-import type { EnvironmentReading, GrowLog, PlantBatch, AiDiagnosis, GrowSetup, Room, FacilityBriefing, ArPreferences, LogProposal } from './types';
+import type { EnvironmentReading, GrowLog, PlantBatch, AiDiagnosis, GrowSetup, Room, FacilityBriefing, ArPreferences, LogProposal, GrowStage } from './types';
 import { VpdZone } from './types';
 import { MOCK_BATCHES, DEFAULT_GROW_SETUP, MOCK_ROOMS, FLIP_DATE } from './constants';
 import { SystemErrorBoundary } from './components/SystemErrorBoundary';
@@ -77,17 +55,6 @@ export const App = () => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3000);
   }, []);
-    let id: string;
-    try {
-      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        id = crypto.randomUUID();
-      } else {
-        id = Date.now().toString() + Math.random().toString(36).substring(2, 9);
-      }
-    } catch (e) { id = Date.now().toString(); }
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
-  }, []);
 
   /**
    * Initializes room structure.
@@ -107,7 +74,7 @@ export const App = () => {
               ...templateRoom,
               name: batch ? `${batch.strain} (${templateRoom.name.split('(')[1] || templateRoom.name})` : templateRoom.name,
               stageDay: dynamicStageDay,
-              stage: batch?.currentStage as any || templateRoom.stage,
+              stage: (batch?.currentStage as GrowStage) || templateRoom.stage,
           };
       });
   }, []);
@@ -276,24 +243,6 @@ export const App = () => {
   }, [envReading]);
 
   const currentBatch = useMemo(() => selectedBatch || batches[0] || MOCK_BATCHES[0], [batches, selectedBatch]);
-
-  const handleCapture = useCallback(async (file: File) => {
-    setView('dashboard');
-    setAnalyzing(true);
-
-    try {
-        const processed = await ImageUtils.processImage(file);
-
-        const diagnosis = await geminiService.analyzePlantImage(
-            processed.full,
-            settings,
-            undefined,
-            envReading || undefined,
-            currentBatch?.breederHarvestDays
-        );
-
-        setAnalysisData({ diagnosis, image: processed.full, thumbnail: processed.thumbnail });
-        Haptic.success();
   
   // Calculate Briefing Freshness
   const isBriefingStale = useMemo(() => {
@@ -301,7 +250,7 @@ export const App = () => {
     return Date.now() - briefing.timestamp > 4 * 60 * 60 * 1000;
   }, [briefing]);
 
-  const handleCapture = async (file: File) => {
+  const handleCapture = useCallback(async (file: File) => {
     try {
       setAnalyzing(true);
       errorService.addBreadcrumb('ui', 'Analyzing Capture', { size: file.size });
@@ -323,7 +272,7 @@ export const App = () => {
     } finally {
       setAnalyzing(false);
     }
-  }, [addToast, currentBatch, envReading, settings]);
+  }, [addToast]);
 
   const handleSaveAnalysis = useCallback(async () => {
     if (!analysisData || !currentBatch) return;
@@ -488,29 +437,6 @@ export const App = () => {
     addToast("Ask Gemini to 'Simulate future growth' in Chat", "info");
   };
 
-  const handleLogProposal = async (partialLog: LogProposal) => {
-    if (!partialLog.manualNotes) return;
-    const newLog: GrowLog = {
-        id: crypto.randomUUID(),
-        plantBatchId: currentBatch.id, // Default to current batch context
-        timestamp: Date.now(),
-        actionType: partialLog.actionType || 'Observation',
-        manualNotes: partialLog.manualNotes,
-        aiDiagnosis: {
-            healthScore: partialLog.healthScore || 85,
-            detectedPests: (partialLog.detectedPests as any) || [],
-            nutrientDeficiencies: (partialLog.nutrientDeficiencies as any) || [],
-            morphologyNotes: partialLog.manualNotes,
-            recommendations: (partialLog.recommendations as any) || []
-        },
-        imageUrl: undefined // Chat based logs might not have images initially
-    };
-    
-    await dbService.saveLog(newLog);
-    setLogs(prev => [newLog, ...prev]);
-    addToast("Log Created from Chat", "success");
-  };
-
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-neon-green/30 selection:text-white overflow-x-hidden">
       <ToastContainer toasts={toasts} removeToast={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
@@ -558,12 +484,6 @@ export const App = () => {
          />
       )}
 
-      <div className="min-h-screen bg-[#000000] text-white font-sans selection:bg-neon-green/30 flex flex-col pb-20">
-        
-        {/* === VIEW: DASHBOARD === */}
-        {view === 'dashboard' && (
-           <div className="p-5 space-y-6 animate-fade-in flex-1 overflow-y-auto">
-             <header className="flex justify-between items-center pt-safe-top">
       {/* --- DASHBOARD VIEW --- */}
       {view === 'dashboard' && (
         <div className="pb-32 animate-fade-in">
