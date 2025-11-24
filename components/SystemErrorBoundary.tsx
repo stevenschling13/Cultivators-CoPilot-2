@@ -12,10 +12,13 @@ interface ErrorBoundaryState {
 }
 
 export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -40,7 +43,10 @@ export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
             The interface encountered a critical rendering error. Protocol reset required.
           </p>
           <button 
-            onClick={() => { Haptic.tap(); window.location.reload(); }}
+            onClick={() => { 
+              try { Haptic.tap(); } catch(e) {}
+              window.location.reload(); 
+            }}
             className="px-8 py-3 bg-white text-black font-bold rounded-full active:scale-95 transition-transform hover:bg-gray-200"
           >
             REBOOT SYSTEM
@@ -48,8 +54,6 @@ export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
         </div>
       );
     }
-    // In most React setups, extending Component<P, S> ensures this.props is correctly typed as Readonly<P>.
-    // If environments cause issues, direct access or safe navigation handles it.
     return this.props.children;
   }
 }

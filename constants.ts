@@ -1,4 +1,5 @@
 
+
 import { GrowSetup, PlantBatch, Room, AlertLevel } from "./types";
 
 export const AI_RESPONSE_SCHEMA = {
@@ -84,8 +85,8 @@ export const FLIP_DATE = '2025-10-02T00:00:00.000Z';
 
 export const MOCK_ROOMS: Room[] = [
   {
-    id: 'tent-main',
-    name: 'Garage 5x5 (Blue/Green)',
+    id: 'tent-blue',
+    name: 'Blue Pheno (Garage Left)',
     stage: 'Flowering' as any,
     stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
     activeBatchId: 'blue-pheno',
@@ -97,6 +98,22 @@ export const MOCK_ROOMS: Room[] = [
       lastUpdated: Date.now(),
       status: 'NOMINAL',
       history: [1.1, 1.13, 1.16, 1.29, 1.26, 1.39, 1.26] // Recent weekly VPDs
+    }
+  },
+  {
+    id: 'tent-green',
+    name: 'Green Pheno (Garage Right)',
+    stage: 'Flowering' as any,
+    stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
+    activeBatchId: 'green-pheno',
+    metrics: {
+      temp: 72.1,
+      rh: 50.2,
+      vpd: 1.18,
+      co2: 442,
+      lastUpdated: Date.now(),
+      status: 'NOMINAL',
+      history: [1.05, 1.1, 1.15, 1.2, 1.18, 1.22, 1.18] // Slightly different microclimate
     }
   }
 ];

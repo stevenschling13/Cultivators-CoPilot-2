@@ -1,4 +1,4 @@
-import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage, FunctionCallingMode } from "@google/genai";
+import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage } from "@google/genai";
 import { AiDiagnosis, ChatMessage, GrowSetup, GrowLog, EnvironmentReading, Room, FacilityBriefing, CohortAnalysis, ChatContext } from "../types";
 import { PHYTOPATHOLOGIST_INSTRUCTION, FLIP_DATE } from "../constants";
 
@@ -157,7 +157,7 @@ class GeminiService {
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemgemini-3-pro-preview',
+        model: 'gemini-3-pro-preview',
         contents: {
           parts: [{ text: `Telemetry: ${JSON.stringify(roomSummaries)}. Recent Activity: ${JSON.stringify(recentLogs)}. Generate Briefing.` }]
         },
@@ -430,7 +430,7 @@ class GeminiService {
             config: {
                 systemInstruction: systemPrompt,
                 tools: [{ functionDeclarations: [proposeLogTool] }], // EXCLUSIVE: No googleSearch allowed here
-                toolConfig: { functionCallingConfig: { mode: FunctionCallingMode.AUTO } }
+                toolConfig: { functionCallingConfig: { mode: 'AUTO' } }
             }
         });
 
@@ -445,7 +445,23 @@ class GeminiService {
             if (fcs && fcs.length > 0) {
                 const fc = fcs[0];
                 if (fc.name === 'proposeLog') {
-                    if (onToolCall) onToolCall(fc.args as unknown as Partial<GrowLog>);
+                    // Normalize flat arguments into nested GrowLog structure for UI
+                    const args = fc.args as any;
+                    const structuredPayload: Partial<GrowLog> = {
+                        manualNotes: args.manualNotes,
+                        actionType: args.actionType,
+                        aiDiagnosis: {
+                            healthScore: args.healthScore || 85,
+                            detectedPests: args.detectedPests || [],
+                            nutrientDeficiencies: args.nutrientDeficiencies || [],
+                            morphologyNotes: args.manualNotes || "AI Observation", // Use notes as morphology summary if not separate
+                            recommendations: args.recommendations || [],
+                            progressionAnalysis: "Chat Analysis",
+                            harvestPrediction: undefined
+                        }
+                    };
+
+                    if (onToolCall) onToolCall(structuredPayload);
                 }
             }
         }
