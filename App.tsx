@@ -1,3 +1,23 @@
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback
+} from 'react';
+import { 
+  Settings,
+  Scan,
+  MessageCircle,
+  LayoutDashboard,
+  Droplet,
+  Wind,
+  Thermometer,
+  Plus,
+  Download,
+  Upload
+} from 'lucide-react';
+
+// Services
 
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -51,6 +71,12 @@ export const App = () => {
   const [analysisData, setAnalysisData] = useState<{ diagnosis: AiDiagnosis; image: string; thumbnail: string } | null>(null);
 
   const addToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
+    const id = crypto.randomUUID();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  }, []);
     let id: string;
     try {
       if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -145,6 +171,10 @@ export const App = () => {
           dbService.getLogs(),
           dbService.getSettings()
         ]);
+        setBatches(b.length > 0 ? b : MOCK_BATCHES);
+        setLogs([...l].sort((a, b) => b.timestamp - a.timestamp));
+        setSettings(s);
+        setRooms(MOCK_ROOMS);
         
         const activeBatches = b.length > 0 ? b : MOCK_BATCHES;
         setBatches(activeBatches);
@@ -239,13 +269,31 @@ export const App = () => {
         });
     });
     return () => unsub();
-  }, []);
+  }, [addToast]);
 
   const metrics = useMemo(() => {
     return envReading ? EnvironmentService.processReading(envReading) : { vpd: 1.25, dli: 35, vpdStatus: VpdZone.TRANSPIRATION };
   }, [envReading]);
 
   const currentBatch = useMemo(() => selectedBatch || batches[0] || MOCK_BATCHES[0], [batches, selectedBatch]);
+
+  const handleCapture = useCallback(async (file: File) => {
+    setView('dashboard');
+    setAnalyzing(true);
+
+    try {
+        const processed = await ImageUtils.processImage(file);
+
+        const diagnosis = await geminiService.analyzePlantImage(
+            processed.full,
+            settings,
+            undefined,
+            envReading || undefined,
+            currentBatch?.breederHarvestDays
+        );
+
+        setAnalysisData({ diagnosis, image: processed.full, thumbnail: processed.thumbnail });
+        Haptic.success();
   
   // Calculate Briefing Freshness
   const isBriefingStale = useMemo(() => {
@@ -275,8 +323,111 @@ export const App = () => {
     } finally {
       setAnalyzing(false);
     }
-  };
+  }, [addToast, currentBatch, envReading, settings]);
 
+  const handleSaveAnalysis = useCallback(async () => {
+    if (!analysisData || !currentBatch) return;
+
+    const newLog: GrowLog = {
+        id: crypto.randomUUID(),
+        plantBatchId: currentBatch.id,
+        timestamp: Date.now(),
+        imageUrl: analysisData.image,
+        thumbnailUrl: analysisData.thumbnail,
+        actionType: 'Observation',
+        aiDiagnosis: analysisData.diagnosis,
+        manualNotes: analysisData.diagnosis.morphologyNotes
+    };
+
+    await dbService.saveLog(newLog);
+    setLogs(prev => [newLog, ...prev]);
+    setAnalysisData(null);
+    addToast("Diagnosis Saved", "success");
+    Haptic.success();
+  }, [addToast, analysisData, currentBatch]);
+
+  const handleLogProposal = useCallback(async (proposal: Partial<GrowLog>) => {
+    if (!currentBatch) return;
+
+    const newLog: GrowLog = {
+        id: crypto.randomUUID(),
+        plantBatchId: currentBatch.id,
+        timestamp: Date.now(),
+        actionType: proposal.actionType || 'Observation',
+        manualNotes: proposal.manualNotes || 'Added via Copilot',
+        aiDiagnosis: proposal.aiDiagnosis
+    };
+
+    await dbService.saveLog(newLog);
+    setLogs(prev => [newLog, ...prev]);
+    addToast("Log Entry Created via AI", "success");
+  }, [addToast, currentBatch]);
+
+  const handleUpdateLog = useCallback(async (updatedLog: GrowLog) => {
+    await dbService.saveLog(updatedLog);
+    setLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
+    addToast("Log Entry Updated", "success");
+  }, [addToast]);
+
+  const handleDeleteLog = useCallback(async (id: string) => {
+    await dbService.deleteLog(id);
+    setLogs(prev => prev.filter(l => l.id !== id));
+    addToast("Log Entry Deleted", "info");
+  }, [addToast]);
+
+  const handleSimulate = useCallback(async (img: string) => {
+    addToast("Initializing Veo Simulation...", "info");
+    try {
+        const videoUrl = await geminiService.generateGrowthSimulation(img);
+        const a = document.createElement('a');
+        a.href = videoUrl;
+        a.download = "growth_sim_veo.mp4";
+        a.click();
+        addToast("Simulation Ready & Downloaded", "success");
+    } catch (e) {
+        addToast("Simulation Failed: " + (e as Error).message, "error");
+    }
+  }, [addToast]);
+
+  const handleRoomClick = useCallback((room: Room) => {
+     const batch = batches.find(b => b.id === room.activeBatchId) || batches[0];
+     if (batch) {
+        setSelectedBatch(batch);
+     } else {
+        addToast("No Active Batch in Room", "info");
+     }
+  }, [addToast, batches]);
+
+  const handleBackup = useCallback(async (password: string) => {
+    try {
+      await BackupService.createEncryptedBackup(password);
+      addToast("Backup Created & Downloaded", "success");
+      return true;
+    } catch (e) {
+      console.error(e);
+      addToast("Backup Failed", "error");
+      return false;
+    }
+  }, [addToast]);
+
+  const handleRestore = useCallback(async (password: string, file?: File) => {
+    if (!file) return false;
+    try {
+       const success = await BackupService.restoreFromBackup(file, password);
+       if (success) {
+           addToast("System Restored. Rebooting...", "success");
+           setTimeout(() => window.location.reload(), 2000);
+           return true;
+       } else {
+           return false;
+       }
+    } catch (e) {
+       console.error(e);
+       return false;
+    }
+  }, [addToast]);
+
+  const selectedBatchLogs = useMemo(() => selectedBatch ? logs.filter(l => l.plantBatchId === selectedBatch.id) : [], [logs, selectedBatch]);
   const saveLog = async () => {
     if (!analysisData) return;
     
@@ -365,6 +516,54 @@ export const App = () => {
       <ToastContainer toasts={toasts} removeToast={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
       <ProcessingOverlay isProcessing={analyzing} />
 
+      {showImport && (
+        <LegacyImportModal 
+           onClose={() => setShowImport(false)}
+           onImportComplete={() => {
+              setShowImport(false);
+              addToast("Import Completed Successfully", "success");
+              dbService.getLogs().then(l => setLogs(l.sort((a, b) => b.timestamp - a.timestamp)));
+           }}
+        />
+      )}
+      
+      {backupModalMode && (
+         <BackupModal 
+            mode={backupModalMode}
+            onClose={() => setBackupModalMode(null)}
+            onConfirm={(p, f) => {
+                if (backupModalMode === 'backup') {
+                    return handleBackup(p);
+                } else {
+                    return handleRestore(p, f);
+                }
+            }}
+         />
+      )}
+
+      {selectedBatch && (
+        <BatchDetailModal
+           batch={selectedBatch}
+           onClose={() => setSelectedBatch(null)}
+           logs={selectedBatchLogs}
+           onDeleteLog={handleDeleteLog}
+           onUpdateLog={handleUpdateLog}
+        />
+      )}
+
+      {view === 'camera' && (
+         <CameraView 
+           onCapture={handleCapture} 
+           onCancel={() => setView('dashboard')} 
+         />
+      )}
+
+      <div className="min-h-screen bg-[#000000] text-white font-sans selection:bg-neon-green/30 flex flex-col pb-20">
+        
+        {/* === VIEW: DASHBOARD === */}
+        {view === 'dashboard' && (
+           <div className="p-5 space-y-6 animate-fade-in flex-1 overflow-y-auto">
+             <header className="flex justify-between items-center pt-safe-top">
       {/* --- DASHBOARD VIEW --- */}
       {view === 'dashboard' && (
         <div className="pb-32 animate-fade-in">

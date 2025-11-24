@@ -165,6 +165,10 @@ export const StageProgressBar = ({ current, total, label }: { current: number, t
 
 // --- Trend Sparkline ---
 
+export const TrendSparkline = memo(({ data }: { data: number[] }) => {
+  // Simple SVG sparkline
+  const computedPoints = useMemo(() => {
+    if (!data.length) return '';
 export const TrendSparkline = memo(({ data }: { data?: number[] }) => {
   const computedPoints = useMemo(() => {
     if (!data || !data.length) return '';
@@ -174,6 +178,7 @@ export const TrendSparkline = memo(({ data }: { data?: number[] }) => {
     const min = Math.min(...data, 0);
     const range = max - min || 1;
     return data.map((d, i) => {
+      const x = (i / (data.length - 1)) * 100;
       const x = (i / (len - 1)) * 100;
       const y = 100 - ((d - min) / range) * 100;
       return `${x},${y}`;

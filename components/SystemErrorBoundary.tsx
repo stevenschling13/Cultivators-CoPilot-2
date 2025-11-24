@@ -13,6 +13,11 @@ interface ErrorBoundaryState {
 }
 
 export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+  
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+  }
   // Explicitly declare props to satisfy strict TypeScript checks
   declare props: Readonly<ErrorBoundaryProps>;
 
