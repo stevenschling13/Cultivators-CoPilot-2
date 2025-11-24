@@ -1,243 +1,171 @@
-import { spawn } from "child_process";
-import readline from "readline";
+/**
+ * MCP BRIDGE CLIENT v1.0
+ * 
+ * A standalone, zero-dependency Node.js client for the Model Context Protocol (MCP).
+ * This script acts as a bridge between GitHub Agents/Actions and the Google AI Studio MCP Server.
+ * 
+ * Usage:
+ * 1. List Tools: node scripts/mcp_client.js
+ * 2. Execute Prompt: node scripts/mcp_client.js "Analyze the project structure"
+ * 
+ * Environment Requirement:
+ * GEMINI_API_KEY must be set in the environment.
+ */
 
+const { spawn } = require('child_process');
+const readline = require('readline');
+
+// ANSI Colors
 const COLORS = {
   reset: "\x1b[0m",
   green: "\x1b[32m",
-  red: "\x1b[31m",
+  cyan: "\x1b[36m",
   yellow: "\x1b[33m",
-  cyan: "\x1b[36m"
+  red: "\x1b[31m",
+  dim: "\x1b[2m"
 };
 
-const log = (color, label, message) => {
-  console.log(`${color}[${label}]${COLORS.reset} ${message}`);
-};
+const log = (color, label, msg) => console.error(`${color}[${label}]${COLORS.reset} ${msg}`);
 
-const normalizeError = (message) => {
-  if (!message) return "Gemini Service Unavailable";
-  const normalized = typeof message === "string" ? message : String(message);
-  if (normalized.includes("429")) return "Daily API Limit Reached";
-  if (normalized.includes("401")) return "Invalid API Key";
-  if (normalized.toLowerCase().includes("safety")) return "Safety Block Triggered";
-  if (normalized.includes("503")) return "Gemini Overloaded";
-  return normalized;
-};
+// Config
+const SERVER_CMD = 'npx';
+const SERVER_ARGS = ['-y', 'aistudio-mcp-server'];
 
-const GEMINI_KEY = process.env.GEMINI_API_KEY;
+const main = async () => {
+  const prompt = process.argv[2];
 
-if (!GEMINI_KEY) {
-  log(COLORS.red, "HALT", "GEMINI_API_KEY is missing. Export it before running the MCP bridge.");
-  process.exit(1);
-}
+  if (!process.env.GEMINI_API_KEY) {
+    log(COLORS.red, "ERROR", "GEMINI_API_KEY is missing.");
+    console.error("Please export GEMINI_API_KEY in your environment.");
+    process.exit(1);
+  }
 
-let requestId = 1;
-const pendingRequests = new Map();
+  log(COLORS.cyan, "INIT", "Spawning AI Studio MCP Server...");
 
-const server = spawn("npx", ["--yes", "aistudio-mcp-server"], {
-  env: { ...process.env },
-  stdio: ["pipe", "pipe", "pipe"]
-});
-
-const stdoutBuffer = { data: "" };
-
-const sendRpc = (method, params = {}) => {
-  const id = requestId++;
-  const payload = { jsonrpc: "2.0", id, method, params };
-
-  const promise = new Promise((resolve, reject) => {
-    pendingRequests.set(id, { resolve, reject, method });
+  const server = spawn(SERVER_CMD, SERVER_ARGS, {
+    env: { ...process.env },
+    stdio: ['pipe', 'pipe', process.stderr] 
   });
 
-  server.stdin.write(`${JSON.stringify(payload)}\n`);
-  log(COLORS.cyan, "RPC", `-> ${method}`);
-  return promise;
-};
+  const rl = readline.createInterface({ input: server.stdout });
+  let msgId = 0;
+  let pendingRequests = new Map();
 
-const handleResponse = (message) => {
-  if (typeof message !== "object" || message === null) return;
-
-  if (typeof message.id === "number" && pendingRequests.has(message.id)) {
-    const pending = pendingRequests.get(message.id);
-    pendingRequests.delete(message.id);
-
-    if (message.error) {
-      const normalized = normalizeError(message.error.message || "Unexpected error");
-      pending.reject(new Error(normalized));
-      return;
-    }
-
-    pending.resolve(message.result ?? message);
-    return;
-  }
-
-  if (message.method) {
-    if (message.params && message.params.event?.text) {
-      log(COLORS.green, "STREAM", message.params.event.text);
-    } else if (message.params && message.params.event?.data) {
-      log(COLORS.green, "STREAM", JSON.stringify(message.params.event.data));
-    } else {
-      log(COLORS.green, "STREAM", JSON.stringify(message));
-    }
-  }
-};
-
-const processStdoutChunk = (chunk) => {
-  stdoutBuffer.data += chunk.toString();
-  const lines = stdoutBuffer.data.split("\n");
-  stdoutBuffer.data = lines.pop() ?? "";
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    try {
-      const parsed = JSON.parse(line);
-      handleResponse(parsed);
-    } catch (error) {
-      log(COLORS.yellow, "INFO", line);
-    }
-  }
-};
-
-const listTools = async () => {
-  const response = await sendRpc("tools/list", {});
-  const tools = response?.tools ?? [];
-  if (!Array.isArray(tools) || tools.length === 0) {
-    throw new Error("No tools exposed by MCP server");
-  }
-
-  log(COLORS.cyan, "TOOLS", tools.map((tool) => tool.name).join(", "));
-  return tools;
-};
-
-const selectPromptTool = (tools) => {
-  const preferredKeys = ["prompt", "input", "query", "message", "text"];
-
-  for (const tool of tools) {
-    const properties = tool?.parameters?.properties;
-    const required = tool?.parameters?.required ?? [];
-    if (!properties) continue;
-
-    const requiredKey = preferredKeys.find(
-      (key) => properties[key]?.type === "string" && required.includes(key)
-    );
-    if (requiredKey) {
-      return { tool, argKey: requiredKey };
-    }
-
-    const optionalKey = preferredKeys.find((key) => properties[key]?.type === "string");
-    if (optionalKey) {
-      return { tool, argKey: optionalKey };
-    }
-  }
-
-  return null;
-};
-
-const callTool = async (tool, argKey, prompt) => {
-  if (!prompt) {
-    log(COLORS.yellow, "SKIP", "No prompt provided; skipping tool call.");
-    return;
-  }
-
-  const args = { [argKey]: prompt };
-
-  const required = tool.parameters?.required ?? [];
-  const missingRequired = required.filter((key) => args[key] === undefined);
-  if (missingRequired.length > 0) {
-    throw new Error(`Missing required fields: ${missingRequired.join(", ")}`);
-  }
-
-  const response = await sendRpc("tools/call", { name: tool.name, arguments: args });
-
-  if (response?.content) {
-    response.content.forEach((item) => {
-      if (item.type === "text" && item.text) {
-        log(COLORS.green, "RESULT", item.text);
-      } else {
-        log(COLORS.green, "RESULT", JSON.stringify(item));
-      }
+  // --- JSON-RPC 2.0 Helper ---
+  const send = (method, params) => {
+    const id = msgId++;
+    const req = { jsonrpc: "2.0", id, method, params };
+    const json = JSON.stringify(req);
+    // log(COLORS.dim, "SEND", json);
+    server.stdin.write(json + "\n");
+    return new Promise((resolve, reject) => {
+      pendingRequests.set(id, { resolve, reject });
     });
-  } else if (response?.result) {
-    log(COLORS.green, "RESULT", JSON.stringify(response.result));
-  } else {
-    log(COLORS.green, "RESULT", JSON.stringify(response));
-  }
-};
+  };
 
-const bootstrap = async () => {
-  await sendRpc("initialize", {
-    protocolVersion: "2024-11-05",
-    capabilities: { streaming: true, tools: {} }
-  });
+  const sendNotify = (method, params) => {
+    const req = { jsonrpc: "2.0", method, params };
+    server.stdin.write(JSON.stringify(req) + "\n");
+  };
 
-  const tools = await listTools();
-  const promptTool = selectPromptTool(tools);
-
-  if (!promptTool) {
-    throw new Error("No suitable prompt tool found (expected a string parameter like 'prompt' or 'input').");
-  }
-
-  log(
-    COLORS.cyan,
-    "INFO",
-    `Routing user input to tool '${promptTool.tool.name}' via argument '${promptTool.argKey}'.`
-  );
-
-  const initialPrompt = process.argv.slice(2).join(" ");
-  if (initialPrompt) {
-    await callTool(promptTool.tool, promptTool.argKey, initialPrompt);
-    return;
-  }
-
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  rl.setPrompt("Prompt> ");
-  rl.prompt();
-
-  rl.on("line", async (input) => {
-    const trimmed = input.trim();
-    if (!trimmed) {
-      rl.prompt();
-      return;
-    }
-
-    if (trimmed.toLowerCase() === "exit") {
-      rl.close();
-      server.kill();
-      return;
-    }
-
+  // --- Response Handler ---
+  rl.on('line', (line) => {
+    if (!line.trim()) return;
     try {
-      await callTool(promptTool.tool, promptTool.argKey, trimmed);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : normalizeError(String(error));
-      log(COLORS.red, "ERROR", message);
+      const msg = JSON.parse(line);
+      // log(COLORS.dim, "RECV", JSON.stringify(msg).slice(0, 100) + "...");
+
+      if (msg.id !== undefined && pendingRequests.has(msg.id)) {
+        const { resolve, reject } = pendingRequests.get(msg.id);
+        pendingRequests.delete(msg.id);
+        if (msg.error) reject(msg.error);
+        else resolve(msg.result);
+      }
+    } catch (e) {
+      // Ignore non-JSON lines (sometimes npx outputs text)
+    }
+  });
+
+  try {
+    // 1. Initialize
+    log(COLORS.cyan, "MCP", "Handshaking...");
+    const initResult = await send("initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: { roots: { listChanged: true } },
+      clientInfo: { name: "CultivatorBridge", version: "1.0.0" }
+    });
+
+    log(COLORS.green, "READY", `Server: ${initResult.serverInfo.name} v${initResult.serverInfo.version}`);
+    sendNotify("notifications/initialized", {});
+
+    // 2. List Tools
+    log(COLORS.cyan, "MCP", "Discovering Capabilities...");
+    const toolsResult = await send("tools/list", {});
+    const tools = toolsResult.tools || [];
+    
+    if (!prompt) {
+      console.log(`\n${COLORS.green}=== Available MCP Tools ===${COLORS.reset}`);
+      tools.forEach(t => {
+        console.log(`${COLORS.yellow}${t.name}${COLORS.reset}: ${t.description || 'No description'}`);
+      });
+      console.log(`\nRun with a prompt to execute: ${COLORS.dim}node scripts/mcp_client.js "Your query"${COLORS.reset}`);
+      process.exit(0);
     }
 
-    rl.prompt();
-  });
+    // 3. Execute Prompt (if provided)
+    // We look for a standard generation tool. AI Studio usually exposes 'generate_content' or similar.
+    // We'll attempt to find a relevant tool or default to the first one if it looks like a generator.
+    const genTool = tools.find(t => t.name.includes('generate') || t.name.includes('content')) || tools[0];
 
-  rl.on("close", () => {
-    log(COLORS.cyan, "INFO", "Shutting down MCP client.");
+    if (!genTool) {
+      throw new Error("No generation tools found on MCP server.");
+    }
+
+    log(COLORS.cyan, "EXEC", `Invoking tool: ${genTool.name}...`);
+    
+    // Construct args - simplistic mapping for generic prompt
+    // AI Studio MCP often expects 'user_prompt' or 'prompt'
+    const args = {};
+    const schema = genTool.inputSchema?.properties || {};
+    if (schema.user_prompt) args.user_prompt = prompt;
+    else if (schema.prompt) args.prompt = prompt;
+    else if (schema.text) args.text = prompt;
+    else {
+        // Fallback: try to inject into first string property
+        const key = Object.keys(schema).find(k => schema[k].type === 'string');
+        if (key) args[key] = prompt;
+    }
+    
+    // Include files context if referencing file (rudimentary support)
+    if (schema.files && prompt.includes('file')) {
+        // If the prompt asks about a file, we'd theoretically parse it here.
+        // For this bridge script, we keep it simple.
+    }
+
+    const callResult = await send("tools/call", {
+      name: genTool.name,
+      arguments: args
+    });
+
+    console.log(`\n${COLORS.green}=== Gemini Response ===${COLORS.reset}\n`);
+    
+    // Parse Content
+    if (callResult.content && Array.isArray(callResult.content)) {
+        callResult.content.forEach(c => {
+            if (c.type === 'text') console.log(c.text);
+            else console.log(`[${c.type} Content]`);
+        });
+    } else {
+        console.log(JSON.stringify(callResult, null, 2));
+    }
+
+  } catch (err) {
+    log(COLORS.red, "FAIL", err.message || JSON.stringify(err));
+    process.exit(1);
+  } finally {
     server.kill();
-  });
+    process.exit(0);
+  }
 };
 
-server.stdout.on("data", processStdoutChunk);
-server.stderr.on("data", (data) => {
-  log(COLORS.yellow, "SERVER", data.toString().trim());
-});
-
-server.on("close", () => {
-  log(COLORS.cyan, "INFO", "AI Studio MCP server stopped.");
-});
-
-server.on("error", (error) => {
-  log(COLORS.red, "HALT", normalizeError(error.message));
-  process.exit(1);
-});
-
-bootstrap().catch((error) => {
-  const message = error instanceof Error ? error.message : normalizeError(String(error));
-  log(COLORS.red, "HALT", message);
-  server.kill();
-  process.exit(1);
-});
+main();

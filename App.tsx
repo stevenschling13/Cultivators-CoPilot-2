@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Settings, Scan, MessageCircle, LayoutDashboard, Droplet, Wind, Thermometer, Plus, Download, Upload, FlaskConical, Zap, CheckCircle2, AlertTriangle, Leaf, Activity, ArrowLeft, Sprout, Fan, ScanEye, RefreshCw, Clock } from 'lucide-react';
 import { EnvironmentService } from './services/environmentService';
@@ -8,7 +10,7 @@ import { hardwareService } from './services/hardwareService';
 import { BackupService } from './services/backupService';
 import { errorService } from './services/errorService'; // New Import
 import type { EnvironmentReading, GrowLog, PlantBatch, AiDiagnosis, GrowSetup, Room, FacilityBriefing, ArPreferences, LogProposal } from './types';
-import { VpdZone, GrowStage } from './types';
+import { VpdZone } from './types';
 import { MOCK_BATCHES, DEFAULT_GROW_SETUP, MOCK_ROOMS, FLIP_DATE } from './constants';
 import { SystemErrorBoundary } from './components/SystemErrorBoundary';
 import { ToastContainer, ToastMsg } from './components/ui/Toast';
@@ -49,11 +51,16 @@ export const App = () => {
   const [analysisData, setAnalysisData] = useState<{ diagnosis: AiDiagnosis; image: string; thumbnail: string } | null>(null);
 
   const addToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
-    const id = crypto.randomUUID();
+    let id: string;
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        id = crypto.randomUUID();
+      } else {
+        id = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+      }
+    } catch (e) { id = Date.now().toString(); }
     setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3000);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   }, []);
 
   /**
@@ -66,7 +73,7 @@ export const App = () => {
           let dynamicStageDay = 0;
           
           if (batch) {
-             const startDate = batch.currentStage === GrowStage.FLOWER ? new Date(FLIP_DATE).getTime() : batch.startDate;
+             const startDate = batch.currentStage === 'Flowering' ? new Date(FLIP_DATE).getTime() : batch.startDate;
              dynamicStageDay = Math.floor((Date.now() - startDate) / (1000 * 60 * 60 * 24));
           }
 
@@ -74,7 +81,7 @@ export const App = () => {
               ...templateRoom,
               name: batch ? `${batch.strain} (${templateRoom.name.split('(')[1] || templateRoom.name})` : templateRoom.name,
               stageDay: dynamicStageDay,
-              stage: (batch?.currentStage as GrowStage) || templateRoom.stage,
+              stage: batch?.currentStage as any || templateRoom.stage,
           };
       });
   }, []);
@@ -90,7 +97,7 @@ export const App = () => {
           const batch = batches.find(b => b.id === room.activeBatchId);
           if (!batch) return room;
           
-          const startDate = batch.currentStage === GrowStage.FLOWER ? new Date(FLIP_DATE).getTime() : batch.startDate;
+          const startDate = batch.currentStage === 'Flowering' ? new Date(FLIP_DATE).getTime() : batch.startDate;
           const newStageDay = Math.floor((Date.now() - startDate) / (1000 * 60 * 60 * 24));
           
           if (newStageDay !== room.stageDay) {
@@ -138,14 +145,10 @@ export const App = () => {
           dbService.getLogs(),
           dbService.getSettings()
         ]);
-        setBatches(b.length > 0 ? b : MOCK_BATCHES);
-        setLogs([...l].sort((a, b) => b.timestamp - a.timestamp));
-        setSettings(s);
-        setRooms(MOCK_ROOMS);
         
         const activeBatches = b.length > 0 ? b : MOCK_BATCHES;
         setBatches(activeBatches);
-        const sortedLogs = [...l].sort((a, b) => b.timestamp - a.timestamp);
+        const sortedLogs = l.sort((a, b) => b.timestamp - a.timestamp);
         setLogs(sortedLogs);
         setSettings(s);
         
@@ -236,7 +239,7 @@ export const App = () => {
         });
     });
     return () => unsub();
-  }, [addToast]);
+  }, []);
 
   const metrics = useMemo(() => {
     return envReading ? EnvironmentService.processReading(envReading) : { vpd: 1.25, dli: 35, vpdStatus: VpdZone.TRANSPIRATION };
@@ -250,7 +253,7 @@ export const App = () => {
     return Date.now() - briefing.timestamp > 4 * 60 * 60 * 1000;
   }, [briefing]);
 
-  const handleCapture = useCallback(async (file: File) => {
+  const handleCapture = async (file: File) => {
     try {
       setAnalyzing(true);
       errorService.addBreadcrumb('ui', 'Analyzing Capture', { size: file.size });
@@ -272,111 +275,8 @@ export const App = () => {
     } finally {
       setAnalyzing(false);
     }
-  }, [addToast]);
+  };
 
-  const handleSaveAnalysis = useCallback(async () => {
-    if (!analysisData || !currentBatch) return;
-
-    const newLog: GrowLog = {
-        id: crypto.randomUUID(),
-        plantBatchId: currentBatch.id,
-        timestamp: Date.now(),
-        imageUrl: analysisData.image,
-        thumbnailUrl: analysisData.thumbnail,
-        actionType: 'Observation',
-        aiDiagnosis: analysisData.diagnosis,
-        manualNotes: analysisData.diagnosis.morphologyNotes
-    };
-
-    await dbService.saveLog(newLog);
-    setLogs(prev => [newLog, ...prev]);
-    setAnalysisData(null);
-    addToast("Diagnosis Saved", "success");
-    Haptic.success();
-  }, [addToast, analysisData, currentBatch]);
-
-  const handleLogProposal = useCallback(async (proposal: Partial<GrowLog>) => {
-    if (!currentBatch) return;
-
-    const newLog: GrowLog = {
-        id: crypto.randomUUID(),
-        plantBatchId: currentBatch.id,
-        timestamp: Date.now(),
-        actionType: proposal.actionType || 'Observation',
-        manualNotes: proposal.manualNotes || 'Added via Copilot',
-        aiDiagnosis: proposal.aiDiagnosis
-    };
-
-    await dbService.saveLog(newLog);
-    setLogs(prev => [newLog, ...prev]);
-    addToast("Log Entry Created via AI", "success");
-  }, [addToast, currentBatch]);
-
-  const handleUpdateLog = useCallback(async (updatedLog: GrowLog) => {
-    await dbService.saveLog(updatedLog);
-    setLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
-    addToast("Log Entry Updated", "success");
-  }, [addToast]);
-
-  const handleDeleteLog = useCallback(async (id: string) => {
-    await dbService.deleteLog(id);
-    setLogs(prev => prev.filter(l => l.id !== id));
-    addToast("Log Entry Deleted", "info");
-  }, [addToast]);
-
-  const handleSimulate = useCallback(async (img: string) => {
-    addToast("Initializing Veo Simulation...", "info");
-    try {
-        const videoUrl = await geminiService.generateGrowthSimulation(img);
-        const a = document.createElement('a');
-        a.href = videoUrl;
-        a.download = "growth_sim_veo.mp4";
-        a.click();
-        addToast("Simulation Ready & Downloaded", "success");
-    } catch (e) {
-        addToast("Simulation Failed: " + (e as Error).message, "error");
-    }
-  }, [addToast]);
-
-  const handleRoomClick = useCallback((room: Room) => {
-     const batch = batches.find(b => b.id === room.activeBatchId) || batches[0];
-     if (batch) {
-        setSelectedBatch(batch);
-     } else {
-        addToast("No Active Batch in Room", "info");
-     }
-  }, [addToast, batches]);
-
-  const handleBackup = useCallback(async (password: string) => {
-    try {
-      await BackupService.createEncryptedBackup(password);
-      addToast("Backup Created & Downloaded", "success");
-      return true;
-    } catch (e) {
-      console.error(e);
-      addToast("Backup Failed", "error");
-      return false;
-    }
-  }, [addToast]);
-
-  const handleRestore = useCallback(async (password: string, file?: File) => {
-    if (!file) return false;
-    try {
-       const success = await BackupService.restoreFromBackup(file, password);
-       if (success) {
-           addToast("System Restored. Rebooting...", "success");
-           setTimeout(() => window.location.reload(), 2000);
-           return true;
-       } else {
-           return false;
-       }
-    } catch (e) {
-       console.error(e);
-       return false;
-    }
-  }, [addToast]);
-
-  const selectedBatchLogs = useMemo(() => selectedBatch ? logs.filter(l => l.plantBatchId === selectedBatch.id) : [], [logs, selectedBatch]);
   const saveLog = async () => {
     if (!analysisData) return;
     
@@ -437,45 +337,33 @@ export const App = () => {
     addToast("Ask Gemini to 'Simulate future growth' in Chat", "info");
   };
 
+  const handleLogProposal = async (partialLog: LogProposal) => {
+    if (!partialLog.manualNotes) return;
+    const newLog: GrowLog = {
+        id: crypto.randomUUID(),
+        plantBatchId: currentBatch.id, // Default to current batch context
+        timestamp: Date.now(),
+        actionType: partialLog.actionType || 'Observation',
+        manualNotes: partialLog.manualNotes,
+        aiDiagnosis: {
+            healthScore: partialLog.healthScore || 85,
+            detectedPests: (partialLog.detectedPests as any) || [],
+            nutrientDeficiencies: (partialLog.nutrientDeficiencies as any) || [],
+            morphologyNotes: partialLog.manualNotes,
+            recommendations: (partialLog.recommendations as any) || []
+        },
+        imageUrl: undefined // Chat based logs might not have images initially
+    };
+    
+    await dbService.saveLog(newLog);
+    setLogs(prev => [newLog, ...prev]);
+    addToast("Log Created from Chat", "success");
+  };
+
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-neon-green/30 selection:text-white overflow-x-hidden">
       <ToastContainer toasts={toasts} removeToast={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
       <ProcessingOverlay isProcessing={analyzing} />
-
-      {showImport && (
-        <LegacyImportModal 
-           onClose={() => setShowImport(false)}
-           onImportComplete={() => {
-              setShowImport(false);
-              addToast("Import Completed Successfully", "success");
-              dbService.getLogs().then(l => setLogs(l.sort((a, b) => b.timestamp - a.timestamp)));
-           }}
-        />
-      )}
-      
-      {backupModalMode && (
-         <BackupModal 
-            mode={backupModalMode}
-            onClose={() => setBackupModalMode(null)}
-            onConfirm={(p, f) => {
-                if (backupModalMode === 'backup') {
-                    return handleBackup(p);
-                } else {
-                    return handleRestore(p, f);
-                }
-            }}
-         />
-      )}
-
-      {selectedBatch && (
-        <BatchDetailModal
-           batch={selectedBatch}
-           onClose={() => setSelectedBatch(null)}
-           logs={selectedBatchLogs}
-           onDeleteLog={handleDeleteLog}
-           onUpdateLog={handleUpdateLog}
-        />
-      )}
 
       {/* --- DASHBOARD VIEW --- */}
       {view === 'dashboard' && (
@@ -767,7 +655,7 @@ export const App = () => {
       )}
 
       {/* --- NAVIGATION BAR --- */}
-      {view !== 'camera' && view !== 'settings' && (
+      {view !== 'camera' && view !== 'chat' && view !== 'settings' && (
          <div className="fixed bottom-0 left-0 right-0 p-4 pb-safe-bottom z-50 pointer-events-none">
             <div className="mx-auto max-w-sm bg-[#121212]/90 backdrop-blur-xl border border-white/10 rounded-full p-2 flex justify-between items-center shadow-2xl pointer-events-auto">
                <button 

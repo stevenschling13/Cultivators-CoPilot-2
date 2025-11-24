@@ -1,5 +1,3 @@
-
-
 # AGENT COORDINATION PROTOCOL: CULTIVATOR'S COPILOT (ALPHA-OPTIMIZED)
 
 > **Read Me First — Mandatory Gate**: Before modifying *any* file, every agent must read this document in full and confirm alignment with the latest directives. Do not start coding until you have acknowledged `TOKEN: CULTIVATOR-ALPHA-V3-SYNC-ACK` in your session notes.
@@ -162,3 +160,15 @@ To ensure seamless collaboration between agents and efficient GitHub code review
   ```typescript
   errorService.addBreadcrumb('api', 'Starting large file upload', { size: file.size });
   ```
+
+## 12. MODEL CONTEXT PROTOCOL (MCP) INTEGRATION
+To bridge this repository with Google AI Studio/Gemini 2.5 models in a CI/CD environment:
+
+1.  **Script:** `scripts/mcp_client.js`
+2.  **Purpose:** Standalone JSON-RPC client connecting to `aistudio-mcp-server`.
+3.  **Setup:**
+    -   Set `GEMINI_API_KEY` in your environment.
+    -   Run `node scripts/mcp_client.js` to list capabilities.
+    -   Run `node scripts/mcp_client.js "Your prompt"` to analyze the codebase via Gemini.
+4.  **GitHub Agent Config:**
+    -   If deploying via Cloud Run or using a GitHub Action Agent, invoke this script to inject Gemini's reasoning into the workflow.

@@ -1,4 +1,3 @@
-
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { X, ZoomIn, Sliders, Scan, Target, Check, Activity, Leaf, Hash, RefreshCw, AlertCircle, Mic, MicOff } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
@@ -26,9 +25,11 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
   const [arData, setArData] = useState<ArOverlayData | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [transcript, setTranscript] = useState<string | null>(null);
   
   const rafRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
+  const transcriptTimeoutRef = useRef<any>(null);
 
   const [zoom, setZoom] = useState(1);
   const [flashTrigger, setFlashTrigger] = useState(false);
@@ -130,6 +131,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
     geminiService.stopLiveAnalysis();
     setArMode(false);
     setArData(null);
+    setTranscript(null);
   };
 
   const processArFrame = (timestamp: number) => {
@@ -183,6 +185,11 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
         () => {
             console.log("AR Session Closed Remotely");
             if (arMode) stopArSession();
+        },
+        (text, isUser) => {
+            setTranscript(text);
+            if (transcriptTimeoutRef.current) clearTimeout(transcriptTimeoutRef.current);
+            transcriptTimeoutRef.current = setTimeout(() => setTranscript(null), 4000);
         }
       );
       
@@ -308,6 +315,15 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
                     </div>
                 )}
              </div>
+             
+             {/* Live Transcript */}
+             {transcript && (
+                <div className="absolute bottom-32 left-6 right-6 text-center animate-slide-up">
+                    <div className="inline-block bg-black/60 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 text-white text-sm font-medium shadow-lg">
+                        {transcript}
+                    </div>
+                </div>
+             )}
 
              {!isErrorState && (
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-neon-green/30 rounded-lg flex items-center justify-center opacity-50">

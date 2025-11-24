@@ -1,4 +1,4 @@
-import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage, Session, Part } from "@google/genai";
+import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage, LiveSession } from "@google/genai";
 import { AiDiagnosis, ChatMessage, GrowLog, FacilityBriefing, CohortAnalysis, ChatContext, ArOverlayData, Room } from "../types";
 import { PHYTOPATHOLOGIST_INSTRUCTION } from "../constants";
 
@@ -115,7 +115,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 class GeminiService {
   private ai: GoogleGenAI;
-  private liveSession: Session | null = null;
+  private liveSession: LiveSession | null = null;
   
   // Audio State
   private inputAudioContext: AudioContext | null = null;
@@ -126,27 +126,7 @@ class GeminiService {
   private nextPlayTime = 0;
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: this.resolveApiKey() });
-  }
-
-  private resolveApiKey(): string {
-    const envSource =
-      typeof import.meta !== 'undefined' && (import.meta as { env?: Record<string, string | undefined> }).env
-        ? (import.meta as { env?: Record<string, string | undefined> }).env
-        : undefined;
-
-    const browserKey = envSource?.VITE_GEMINI_API_KEY ?? envSource?.GEMINI_API_KEY;
-    const serverKey = typeof process !== 'undefined'
-      ? process.env?.GEMINI_API_KEY ?? process.env?.API_KEY ?? ''
-      : '';
-
-    const apiKey = browserKey ?? serverKey;
-
-    if (!apiKey) {
-      throw new Error('Missing Gemini API key');
-    }
-
-    return apiKey;
+    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   }
 
   private parseDataUri(input: string): { mimeType: string; data: string } {
@@ -430,13 +410,13 @@ class GeminiService {
     const chatHistory = history
       .filter(h => h.role !== 'model' || !h.isThinking)
       .map(h => {
-         const parts: Part[] = [];
+         const parts: any[] = [];
          if (h.attachment) {
              const { mimeType, data } = this.parseDataUri(h.attachment.url);
              parts.push({ inlineData: { mimeType, data } });
          }
          if (h.text) parts.push({ text: h.text });
-         return { role: h.role, parts };
+         return { role: h.role, parts: parts };
       });
 
     const chat = this.ai.chats.create({
@@ -448,55 +428,21 @@ class GeminiService {
         history: chatHistory.slice(0, -1)
     });
     
-    const msgParts: Part[] = [{ text: newMessage }];
+    const msgParts: any[] = [{ text: newMessage }];
     if (imageContext) {
         const { mimeType, data } = this.parseDataUri(imageContext);
         msgParts.unshift({ inlineData: { mimeType, data } });
     }
 
     try {
-        const streamResult = await chat.sendMessageStream({ message: msgParts });
+        const streamResult = await chat.sendMessageStream({ parts: msgParts });
         for await (const chunk of streamResult) {
-            const candidate = chunk.candidates?.[0];
-            const candidateParts = candidate?.content?.parts ?? [];
-            const streamText = chunk.text || candidateParts.map(part => part.text).filter(Boolean).join("");
-
-            if (streamText) onChunk(streamText, candidate?.groundingMetadata);
-
-            candidateParts.forEach(part => {
-                if (part.functionCall?.name === 'proposeLog') {
-                    onToolCall(part.functionCall.args);
-                }
-            });
+            if (chunk.text) onChunk(chunk.text, chunk.groundingMetadata);
+            if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+                const call = chunk.functionCalls[0];
+                if (call.name === 'proposeLog') onToolCall(call.args);
+            }
         }
-    } catch (e) {
-        this.handleApiError(e);
-    }
-  }
-
-  public async generateGrowthSimulation(imageBase64: string): Promise<string> {
-    const modelId = 'veo-3.1-fast-generate-preview';
-    const { mimeType, data } = this.parseDataUri(imageBase64);
-
-    try {
-        let operation = await this.ai.models.generateVideos({
-            model: modelId,
-            image: { imageBytes: data, mimeType },
-            prompt: 'Simulate this canopy for the next 10 days; emphasize node stacking, color shift, and stress cues.'
-        });
-
-        while (!operation.done) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            operation = await this.ai.operations.getVideosOperation({ operation });
-        }
-
-        const video = operation.response?.generatedVideos?.[0]?.video;
-        if (video?.uri) return video.uri;
-        if (video?.videoBytes) {
-            return `data:${video.mimeType || 'video/mp4'};base64,${video.videoBytes}`;
-        }
-
-        throw new Error('No simulation returned');
     } catch (e) {
         this.handleApiError(e);
     }

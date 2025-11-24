@@ -1,6 +1,6 @@
 
 
-import { AlertLevel, GrowSetup, GrowStage, PlantBatch, Room } from "./types";
+import { GrowSetup, PlantBatch, Room, AlertLevel } from "./types";
 
 export const AI_RESPONSE_SCHEMA = {
   healthScore: "number (0-100)",
@@ -67,7 +67,7 @@ export const MOCK_BATCHES: PlantBatch[] = [
     strain: "The Krux × Grandpa's Cookies #6",
     soilMix: '100% BuildASoil UCCR (Living Soil)',
     startDate: new Date('2025-08-02').getTime(),
-    currentStage: GrowStage.FLOWER,
+    currentStage: 'Flowering',
     notes: 'Blue Pheno. Slow start, stout/bushy structure. 8-top manifold. Dark green foliage. Showing mild N fade (expected).',
     projectedHarvestDate: new Date('2025-11-23').getTime(), // based on timeline
     breederHarvestDays: 63
@@ -78,7 +78,7 @@ export const MOCK_BATCHES: PlantBatch[] = [
     strain: "The Krux × Grandpa's Cookies #6",
     soilMix: '50% UCCR / 50% FFOF',
     startDate: new Date('2025-08-02').getTime(),
-    currentStage: GrowStage.FLOWER,
+    currentStage: 'Flowering',
     notes: 'Green Pheno. Vigorous vertical growth. Needs heavier feed/Cal-Mag. Mild Mg deficiency visible mid-flower.',
     projectedHarvestDate: new Date('2025-11-23').getTime(),
     breederHarvestDays: 63
@@ -92,7 +92,7 @@ export const MOCK_ROOMS: Room[] = [
   {
     id: 'tent-blue',
     name: 'Blue Pheno (Garage Left)',
-    stage: GrowStage.FLOWER,
+    stage: 'Flowering' as any,
     stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
     activeBatchId: 'blue-pheno',
     metrics: {
@@ -108,7 +108,7 @@ export const MOCK_ROOMS: Room[] = [
   {
     id: 'tent-green',
     name: 'Green Pheno (Garage Right)',
-    stage: GrowStage.FLOWER,
+    stage: 'Flowering' as any,
     stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
     activeBatchId: 'green-pheno',
     metrics: {
