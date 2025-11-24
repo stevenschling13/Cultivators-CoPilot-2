@@ -382,4 +382,6 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
       </div>
     </div>
   );
-}
+});
+
+ChatInterface.displayName = 'ChatInterface';
