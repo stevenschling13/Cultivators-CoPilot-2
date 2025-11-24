@@ -105,7 +105,7 @@ Use the bundled `cloudbuild.yaml` for a simple CI flow in Google Cloud Build. To
 2. **Repository:** `stevenschling13/Cultivators-CoPilot-2` with branch regex `^main$` (no inversion).
 3. **Location:** Region `global`.
 4. **Configuration:** Use the repo-stored `cloudbuild.yaml` at the repository root.
-5. **Service account:** `959574223828-compute@developer.gserviceaccount.com` (replace if you need least-privilege).
+5. **Service account:** For security, create a dedicated service account with least-privilege permissions (e.g., `roles/cloudbuild.builds.builder`) and grant it to your trigger. Avoid using the default Compute Engine service account.
 6. **Logs:** Enable "Send build logs to GitHub" if you want GitHub-visible build logs.
 
 The pipeline installs dependencies with `npm ci` and runs the production build via `npm run build`, keeping logs in Cloud Logging.
