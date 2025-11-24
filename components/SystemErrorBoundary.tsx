@@ -21,8 +21,6 @@ export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
     error: null 
   };
   
-  // Removed redundant constructor to rely on React.Component initialization
-  
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }

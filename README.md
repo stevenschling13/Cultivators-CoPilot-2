@@ -52,6 +52,7 @@ Use the bundled `.vscode/mcp.json` to light up the GitHub MCP Server in hosts th
 
 - **Remote (hosted by GitHub):** `type: http` pointed at `https://api.githubcopilot.com/mcp/` with a prompt for your PAT (recommended scopes: `copilot`, `repo`, `read:org` depending on needed toolsets).
 - **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server` (replace `your-ghes-host` with your GHES/ghe.com hostname if applicable; omit `-e GITHUB_HOST=...` for github.com). This reuses the same PAT input.
+- **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server`. For GHES/ghe.com, add `-e GITHUB_HOST=your-ghes-host`; omit this flag for github.com. This reuses the same PAT input.
    > **Note:** To use GHES/ghe.com, manually edit `.vscode/mcp.json` to add the `GITHUB_HOST` environment variable to the `github-local` server's `env` section. For example:
    > ```json
    > "env": {
@@ -86,3 +87,26 @@ Quick start:
    >   }
    > }
    > ```
+
+## GitHub Copilot CLI (Public Preview)
+
+Use GitHub Copilot directly from the terminal to stay aligned with the MCP bridge and local workflows.
+
+- **Prerequisites:** Node.js 22+, npm 10+, and an active Copilot subscription. Ensure your organization allows Copilot CLI access.
+- **Install:** `npm install -g @github/copilot` (re-run to update when needed).
+- **Launch & authenticate:** Run `copilot` in the project root, use `/login` when prompted, and trust the working directory. You can also provide a fine-grained PAT via `GH_TOKEN` or `GITHUB_TOKEN` with the **Copilot Requests** permission.
+- **Verify:** `copilot --banner` should show the animated banner. Then submit a prompt like `"Explain the files in this directory"` to confirm responses stream.
+- **Model + MCP awareness:** By default the CLI uses Claude Sonnet 4.5, but you can switch with `/model`. The CLI already bundles GitHub's MCP server, so keep the `scripts/mcp_client.js` bridge available for custom tooling by exporting the `mcpServers` block above into `.github/agent.json` or local configs.
+
+## Cloud Build trigger (GCP)
+
+Use the bundled `cloudbuild.yaml` for a simple CI flow in Google Cloud Build. To recreate the trigger referenced in the project brief:
+
+1. **Trigger type:** Push to a branch (2nd gen, GitHub App repository).
+2. **Repository:** `<username>/<repository>` with branch regex `^main$` (no inversion).
+3. **Location:** Region `global`.
+4. **Configuration:** Use the repo-stored `cloudbuild.yaml` at the repository root.
+5. **Service account:** For security, create a dedicated service account with least-privilege permissions (e.g., `roles/cloudbuild.builds.builder`) and grant it to your trigger. Avoid using the default Compute Engine service account.
+6. **Logs:** Enable "Send build logs to GitHub" if you want GitHub-visible build logs.
+
+The pipeline installs dependencies with `npm ci` and runs the production build via `npm run build`, keeping logs in Cloud Logging.
