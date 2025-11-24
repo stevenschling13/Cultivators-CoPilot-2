@@ -7,8 +7,8 @@ import { ImageUtils } from './services/imageUtils';
 import { hardwareService } from './services/hardwareService';
 import { BackupService } from './services/backupService';
 import { errorService } from './services/errorService'; // New Import
-import type { EnvironmentReading, GrowLog, PlantBatch, AiDiagnosis, GrowSetup, Room, FacilityBriefing, ArPreferences, LogProposal, GrowStage } from './types';
-import { VpdZone } from './types';
+import type { EnvironmentReading, GrowLog, PlantBatch, AiDiagnosis, GrowSetup, Room, FacilityBriefing, ArPreferences, LogProposal } from './types';
+import { VpdZone, GrowStage } from './types';
 import { MOCK_BATCHES, DEFAULT_GROW_SETUP, MOCK_ROOMS, FLIP_DATE } from './constants';
 import { SystemErrorBoundary } from './components/SystemErrorBoundary';
 import { ToastContainer, ToastMsg } from './components/ui/Toast';
@@ -66,7 +66,7 @@ export const App = () => {
           let dynamicStageDay = 0;
           
           if (batch) {
-             const startDate = batch.currentStage === 'Flowering' ? new Date(FLIP_DATE).getTime() : batch.startDate;
+             const startDate = batch.currentStage === GrowStage.FLOWER ? new Date(FLIP_DATE).getTime() : batch.startDate;
              dynamicStageDay = Math.floor((Date.now() - startDate) / (1000 * 60 * 60 * 24));
           }
 
@@ -90,7 +90,7 @@ export const App = () => {
           const batch = batches.find(b => b.id === room.activeBatchId);
           if (!batch) return room;
           
-          const startDate = batch.currentStage === 'Flowering' ? new Date(FLIP_DATE).getTime() : batch.startDate;
+          const startDate = batch.currentStage === GrowStage.FLOWER ? new Date(FLIP_DATE).getTime() : batch.startDate;
           const newStageDay = Math.floor((Date.now() - startDate) / (1000 * 60 * 60 * 24));
           
           if (newStageDay !== room.stageDay) {
