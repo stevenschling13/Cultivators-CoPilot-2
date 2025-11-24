@@ -51,6 +51,7 @@ Agents can then pass prompts as CLI arguments or keep the process interactive; t
 Use the bundled `.vscode/mcp.json` to light up the GitHub MCP Server in hosts that support remote or local servers. The config adds:
 
 - **Remote (hosted by GitHub):** `type: http` pointed at `https://api.githubcopilot.com/mcp/` with a prompt for your PAT (recommended scopes: `copilot`, `repo`, `read:org` depending on needed toolsets).
+- **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server` (replace `your-ghes-host` with your GHES/ghe.com hostname if applicable; omit `-e GITHUB_HOST=...` for github.com). This reuses the same PAT input.
 - **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server`. For GHES/ghe.com, add `-e GITHUB_HOST=your-ghes-host`; omit this flag for github.com. This reuses the same PAT input.
    > **Note:** To use GHES/ghe.com, manually edit `.vscode/mcp.json` to add the `GITHUB_HOST` environment variable to the `github-local` server's `env` section. For example:
    > ```json
