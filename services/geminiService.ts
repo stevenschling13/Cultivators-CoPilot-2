@@ -126,7 +126,27 @@ class GeminiService {
   private nextPlayTime = 0;
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    this.ai = new GoogleGenAI({ apiKey: this.resolveApiKey() });
+  }
+
+  private resolveApiKey(): string {
+    const envSource =
+      typeof import.meta !== 'undefined' && (import.meta as { env?: Record<string, string | undefined> }).env
+        ? (import.meta as { env?: Record<string, string | undefined> }).env
+        : undefined;
+
+    const browserKey = envSource?.VITE_GEMINI_API_KEY ?? envSource?.GEMINI_API_KEY;
+    const serverKey = typeof process !== 'undefined'
+      ? process.env?.GEMINI_API_KEY ?? process.env?.API_KEY ?? ''
+      : '';
+
+    const apiKey = browserKey ?? serverKey;
+
+    if (!apiKey) {
+      throw new Error('Missing Gemini API key');
+    }
+
+    return apiKey;
   }
 
   private parseDataUri(input: string): { mimeType: string; data: string } {
