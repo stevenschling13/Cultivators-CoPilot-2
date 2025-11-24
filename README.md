@@ -51,7 +51,14 @@ Agents can then pass prompts as CLI arguments or keep the process interactive; t
 Use the bundled `.vscode/mcp.json` to light up the GitHub MCP Server in hosts that support remote or local servers. The config adds:
 
 - **Remote (hosted by GitHub):** `type: http` pointed at `https://api.githubcopilot.com/mcp/` with a prompt for your PAT (recommended scopes: `copilot`, `repo`, `read:org` depending on needed toolsets).
-- **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server` reusing the same PAT input; set `GITHUB_HOST` if you target GHES/ghe.com.
+- **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server` (replace `your-ghes-host` with your GHES/ghe.com hostname if applicable; omit `-e GITHUB_HOST=...` for github.com). This reuses the same PAT input.
+   > **Note:** To use GHES/ghe.com, manually edit `.vscode/mcp.json` to add the `GITHUB_HOST` environment variable to the `github-local` server's `env` section. For example:
+   > ```json
+   > "env": {
+   >   "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_mcp_pat}",
+   >   "GITHUB_HOST": "your-ghes-host"
+   > }
+   > ```
 
 Quick start:
 
@@ -59,3 +66,23 @@ Quick start:
 2. Open VS Code 1.101+ (or another MCP host) and accept the `.vscode/mcp.json` workspace config when prompted.
 3. Toggle Agent mode (VS Code Copilot Chat) to initialize the remote server, or start the local Docker flavor if you prefer running it yourself.
 4. Adjust toolsets via `GITHUB_TOOLSETS` or `--toolsets` when running Docker if you want to narrow available GitHub APIs (e.g., `repos,issues,pull_requests`).
+   > **Note:** To customize toolsets in `.vscode/mcp.json`, add the `GITHUB_TOOLSETS` environment variable to the `env` section, or add `--toolsets` to the `args` array of your server configuration. For example:
+   > ```json
+   > {
+   >   "mcpServers": {
+   >     "github-local": {
+   >       "command": "docker",
+   >       "args": [
+   >         "run", "-i", "--rm",
+   >         "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+   >         "-e", "GITHUB_TOOLSETS",
+   >         "ghcr.io/github/github-mcp-server"
+   >       ],
+   >       "env": {
+   >         "GITHUB_PERSONAL_ACCESS_TOKEN": "${input:github_mcp_pat}",
+   >         "GITHUB_TOOLSETS": "repos,issues,pull_requests"
+   >       }
+   >     }
+   >   }
+   > }
+   > ```
