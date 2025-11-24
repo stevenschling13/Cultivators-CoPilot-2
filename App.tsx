@@ -148,7 +148,7 @@ export const App = () => {
         
         const activeBatches = b.length > 0 ? b : MOCK_BATCHES;
         setBatches(activeBatches);
-        const sortedLogs = l.sort((a, b) => b.timestamp - a.timestamp);
+        const sortedLogs = [...l].sort((a, b) => b.timestamp - a.timestamp);
         setLogs(sortedLogs);
         setSettings(s);
         
