@@ -46,16 +46,12 @@ Other agents can invoke the same bridge in their workflows by adding an MCP serv
 
 Agents can then pass prompts as CLI arguments or keep the process interactive; the bridge will initialize, list available tools, and stream outputs so multi-agent runs stay synchronized.
 
-## GitHub MCP Server (Remote or Local)
+## GitHub Copilot CLI (Public Preview)
 
-Use the bundled `.vscode/mcp.json` to light up the GitHub MCP Server in hosts that support remote or local servers. The config adds:
+Use GitHub Copilot directly from the terminal to stay aligned with the MCP bridge and local workflows.
 
-- **Remote (hosted by GitHub):** `type: http` pointed at `https://api.githubcopilot.com/mcp/` with a prompt for your PAT (recommended scopes: `copilot`, `repo`, `read:org` depending on needed toolsets).
-- **Local (Docker):** `command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server` reusing the same PAT input; set `GITHUB_HOST` if you target GHES/ghe.com.
-
-Quick start:
-
-1. Create a GitHub Personal Access Token with the scopes you are comfortable granting to MCP tools.
-2. Open VS Code 1.101+ (or another MCP host) and accept the `.vscode/mcp.json` workspace config when prompted.
-3. Toggle Agent mode (VS Code Copilot Chat) to initialize the remote server, or start the local Docker flavor if you prefer running it yourself.
-4. Adjust toolsets via `GITHUB_TOOLSETS` or `--toolsets` when running Docker if you want to narrow available GitHub APIs (e.g., `repos,issues,pull_requests`).
+- **Prerequisites:** Node.js 22+, npm 10+, and an active Copilot subscription. Ensure your organization allows Copilot CLI access.
+- **Install:** `npm install -g @github/copilot` (re-run to update when needed).
+- **Launch & authenticate:** Run `copilot` in the project root, use `/login` when prompted, and trust the working directory. You can also provide a fine-grained PAT via `GH_TOKEN` or `GITHUB_TOKEN` with the **Copilot Requests** permission.
+- **Verify:** `copilot --banner` should show the animated banner. Then submit a prompt like `"Explain the files in this directory"` to confirm responses stream.
+- **Model + MCP awareness:** By default the CLI uses Claude Sonnet 4.5, but you can switch with `/model`. The CLI already bundles GitHub's MCP server, so keep the `scripts/mcp_client.js` bridge available for custom tooling by exporting the `mcpServers` block above into `.github/agent.json` or local configs.
