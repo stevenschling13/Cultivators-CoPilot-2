@@ -7,7 +7,7 @@ import { ImageUtils } from './services/imageUtils';
 import { hardwareService } from './services/hardwareService';
 import { BackupService } from './services/backupService';
 import { errorService } from './services/errorService'; // New Import
-import type { EnvironmentReading, GrowLog, PlantBatch, AiDiagnosis, GrowSetup, Room, FacilityBriefing, ArPreferences, LogProposal } from './types';
+import type { EnvironmentReading, GrowLog, PlantBatch, AiDiagnosis, GrowSetup, Room, FacilityBriefing, ArPreferences, LogProposal, GrowStage } from './types';
 import { VpdZone } from './types';
 import { MOCK_BATCHES, DEFAULT_GROW_SETUP, MOCK_ROOMS, FLIP_DATE } from './constants';
 import { SystemErrorBoundary } from './components/SystemErrorBoundary';
@@ -74,7 +74,7 @@ export const App = () => {
               ...templateRoom,
               name: batch ? `${batch.strain} (${templateRoom.name.split('(')[1] || templateRoom.name})` : templateRoom.name,
               stageDay: dynamicStageDay,
-              stage: batch?.currentStage as any || templateRoom.stage,
+              stage: (batch?.currentStage as GrowStage) || templateRoom.stage,
           };
       });
   }, []);

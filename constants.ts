@@ -1,6 +1,6 @@
 
 
-import { GrowSetup, PlantBatch, Room, AlertLevel } from "./types";
+import { GrowSetup, PlantBatch, Room, AlertLevel, GrowStage } from "./types";
 
 export const AI_RESPONSE_SCHEMA = {
   healthScore: "number (0-100)",
@@ -92,7 +92,7 @@ export const MOCK_ROOMS: Room[] = [
   {
     id: 'tent-blue',
     name: 'Blue Pheno (Garage Left)',
-    stage: 'Flowering' as any,
+    stage: GrowStage.FLOWER,
     stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
     activeBatchId: 'blue-pheno',
     metrics: {
@@ -108,7 +108,7 @@ export const MOCK_ROOMS: Room[] = [
   {
     id: 'tent-green',
     name: 'Green Pheno (Garage Right)',
-    stage: 'Flowering' as any,
+    stage: GrowStage.FLOWER,
     stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
     activeBatchId: 'green-pheno',
     metrics: {
