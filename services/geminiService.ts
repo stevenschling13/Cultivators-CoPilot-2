@@ -1,6 +1,7 @@
 import { GoogleGenAI, FunctionDeclaration, Type, Schema, Modality, LiveServerMessage, LiveSession } from "@google/genai";
 import { AiDiagnosis, ChatMessage, GrowLog, FacilityBriefing, CohortAnalysis, ChatContext, ArOverlayData, Room } from "../types";
 import { PHYTOPATHOLOGIST_INSTRUCTION } from "../constants";
+import { errorService } from "./errorService";
 
 // --- Tool Definitions ---
 
@@ -126,7 +127,35 @@ class GeminiService {
   private nextPlayTime = 0;
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    this.ai = new GoogleGenAI({ apiKey: this.resolveApiKey() });
+  }
+
+  private resolveApiKey(): string {
+    const viteEnv = (typeof import.meta !== 'undefined'
+      ? (import.meta as { env?: Record<string, string> }).env
+      : undefined);
+
+    const browserKey = viteEnv?.VITE_GEMINI_API_KEY ?? viteEnv?.GEMINI_API_KEY;
+    const serverKey = typeof process !== 'undefined'
+      ? process.env.GEMINI_API_KEY ?? process.env.VITE_GEMINI_API_KEY
+      : undefined;
+
+    const apiKey = browserKey ?? serverKey;
+
+    if (!apiKey || !apiKey.trim()) {
+      const error = new Error("Gemini API key not configured");
+      errorService.captureError(error, {
+        severity: 'CRITICAL',
+        metadata: {
+          context: 'GeminiService.resolveApiKey',
+          hasBrowserEnv: Boolean(viteEnv),
+          hasServerEnv: typeof process !== 'undefined'
+        }
+      });
+      throw error;
+    }
+
+    return apiKey.trim();
   }
 
   private parseDataUri(input: string): { mimeType: string; data: string } {

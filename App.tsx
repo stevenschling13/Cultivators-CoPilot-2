@@ -110,21 +110,21 @@ export const App = () => {
     });
   }, [batches]);
 
-  const refreshBriefing = async (currentRooms: Room[], currentLogs: GrowLog[]) => {
-      setBriefingLoading(true);
-      errorService.addBreadcrumb('api', 'Refreshing Facility Briefing');
-      try {
-          const briefingData = await geminiService.generateFacilityBriefing(currentRooms, currentLogs);
-          setBriefing(briefingData);
-          addToast("Briefing Updated", "success");
-      } catch (e) {
-          console.error("Briefing failed", e);
-          errorService.captureError(e as Error, { severity: 'MEDIUM', metadata: { context: 'refreshBriefing' } });
-          addToast("Briefing Update Failed", "error");
-      } finally {
-          setBriefingLoading(false);
-      }
-  };
+  const refreshBriefing = useCallback(async (currentRooms: Room[], currentLogs: GrowLog[]) => {
+    setBriefingLoading(true);
+    errorService.addBreadcrumb('api', 'Refreshing Facility Briefing');
+    try {
+      const briefingData = await geminiService.generateFacilityBriefing(currentRooms, currentLogs);
+      setBriefing(briefingData);
+      addToast("Briefing Updated", "success");
+    } catch (e) {
+      console.error("Briefing failed", e);
+      errorService.captureError(e as Error, { severity: 'MEDIUM', metadata: { context: 'refreshBriefing' } });
+      addToast("Briefing Update Failed", "error");
+    } finally {
+      setBriefingLoading(false);
+    }
+  }, [addToast]);
 
   const handleUpdateArPreferences = useCallback(async (prefs: ArPreferences) => {
     const newSettings = { ...settings, arPreferences: prefs };
@@ -200,7 +200,7 @@ export const App = () => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [briefing, rooms, logs, updateStageTimers]);
+  }, [briefing, rooms, logs, refreshBriefing, updateStageTimers]);
 
   // --- REAL-TIME SENSOR BINDING ---
   useEffect(() => {

@@ -53,6 +53,21 @@ const main = () => {
     return;
   }
 
+  // 1a. Ensure remote is available to avoid invalid/deleted branch errors during PR creation
+  const remotes = run('git remote', true)
+    ?.split('\n')
+    .map((remote) => remote.trim())
+    .filter(Boolean);
+
+  if (!remotes || remotes.length === 0) {
+    log(
+      COLORS.red,
+      "HALT",
+      "No git remotes configured. Add an origin remote before pushing or creating a PR (e.g., git remote add origin <url>)."
+    );
+    process.exit(1);
+  }
+
   // 2. Get Commit Message
   const args = process.argv.slice(2);
   let commitMsg = args[0];
