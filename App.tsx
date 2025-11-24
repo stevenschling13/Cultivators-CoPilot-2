@@ -477,13 +477,6 @@ export const App = () => {
         />
       )}
 
-      {view === 'camera' && (
-         <CameraView 
-           onCapture={handleCapture} 
-           onCancel={() => setView('dashboard')} 
-         />
-      )}
-
       {/* --- DASHBOARD VIEW --- */}
       {view === 'dashboard' && (
         <div className="pb-32 animate-fade-in">
@@ -774,7 +767,7 @@ export const App = () => {
       )}
 
       {/* --- NAVIGATION BAR --- */}
-      {view !== 'camera' && view !== 'chat' && view !== 'settings' && (
+      {view !== 'camera' && view !== 'settings' && (
          <div className="fixed bottom-0 left-0 right-0 p-4 pb-safe-bottom z-50 pointer-events-none">
             <div className="mx-auto max-w-sm bg-[#121212]/90 backdrop-blur-xl border border-white/10 rounded-full p-2 flex justify-between items-center shadow-2xl pointer-events-auto">
                <button 
