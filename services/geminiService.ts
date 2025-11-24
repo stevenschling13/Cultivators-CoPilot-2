@@ -126,7 +126,20 @@ class GeminiService {
   private nextPlayTime = 0;
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+    this.ai = new GoogleGenAI({ apiKey: this.resolveApiKey() });
+  }
+
+  private resolveApiKey(): string {
+    const viteEnv = (typeof import.meta !== 'undefined'
+      ? (import.meta as { env?: Record<string, string> }).env
+      : undefined);
+
+    const browserKey = viteEnv?.VITE_GEMINI_API_KEY ?? viteEnv?.GEMINI_API_KEY;
+    const serverKey = typeof process !== 'undefined'
+      ? process.env.GEMINI_API_KEY ?? process.env.VITE_GEMINI_API_KEY
+      : undefined;
+
+    return browserKey ?? serverKey ?? '';
   }
 
   private parseDataUri(input: string): { mimeType: string; data: string } {
