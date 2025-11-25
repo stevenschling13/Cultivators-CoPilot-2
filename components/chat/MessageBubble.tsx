@@ -1,7 +1,7 @@
 
-
 import React, { memo } from 'react';
 import { Terminal, ExternalLink } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { ChatMessage, LogProposal } from '../../types';
 import { AnalysisCard } from '../ui/AnalysisCard';
 
@@ -10,53 +10,16 @@ interface MessageBubbleProps {
   onLogSave: (log: LogProposal) => void;
 }
 
-// Simple Markdown Renderer component to avoid heavy libraries
-const MarkdownText = ({ text }: { text: string }) => {
-  if (!text) return null;
-
-  // Split by newlines to handle paragraphs
-  const lines = text.split('\n');
-
-  return (
-    <div className="text-sm leading-relaxed font-sans space-y-2">
-      {lines.map((line, i) => {
-        // Handle Empty Lines
-        if (!line.trim()) return <div key={i} className="h-2" />;
-
-        // Handle Bullet Points
-        if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-           return (
-             <div key={i} className="flex gap-2 pl-2">
-                <span className="text-neon-green/70 mt-1.5 w-1 h-1 rounded-full bg-current shrink-0"></span>
-                <span dangerouslySetInnerHTML={{ __html: formatInlineStyles(line.substring(2)) }} />
-             </div>
-           );
-        }
-        
-        // Handle Headers (Simple # support)
-        if (line.trim().startsWith('### ')) {
-           return <h4 key={i} className="text-neon-green font-bold text-xs uppercase tracking-wider mt-2" dangerouslySetInnerHTML={{ __html: formatInlineStyles(line.substring(4)) }} />;
-        }
-         if (line.trim().startsWith('## ')) {
-           return <h3 key={i} className="text-white font-bold text-sm mt-3 border-b border-white/10 pb-1" dangerouslySetInnerHTML={{ __html: formatInlineStyles(line.substring(3)) }} />;
-        }
-
-        // Default Paragraph
-        return <div key={i} dangerouslySetInnerHTML={{ __html: formatInlineStyles(line) }} />;
-      })}
-    </div>
-  );
-};
-
-// Helper to handle bold/italic regex
-const formatInlineStyles = (text: string) => {
-  // **Bold**
-  let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-bold">$1</strong>');
-  // *Italic*
-  formatted = formatted.replace(/\*(.*?)\*/g, '<em class="text-gray-300">$1</em>');
-  // `Code`
-  formatted = formatted.replace(/`(.*?)`/g, '<code class="bg-white/10 px-1 rounded font-mono text-[10px] text-neon-blue">$1</code>');
-  return formatted;
+// Security: Strict Protocol Check
+// Prevents XSS via malicious links (javascript:, vbscript:, etc.)
+const isSafeUrl = (url: string | undefined): boolean => {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:', 'data:'].includes(parsed.protocol);
+  } catch (e) {
+    return false;
+  }
 };
 
 export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
@@ -78,7 +41,8 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                 ? 'bg-neon-blue/10 border-neon-blue/20 rounded-tr-sm text-white' 
                 : 'bg-[#121212] border-white/10 rounded-tl-sm text-gray-200'}
           `}>
-             {msg.attachment && (
+             {/* Safe Attachment Rendering */}
+             {msg.attachment && isSafeUrl(msg.attachment.url) && (
                 <div className="mb-3 rounded-lg overflow-hidden border border-white/10 bg-black/50">
                     <img src={msg.attachment.url} alt="Attachment" className="max-w-full h-auto max-h-48 object-contain mx-auto" />
                 </div>
@@ -90,7 +54,46 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                    <span>ANALYZING BIO-METRICS...</span>
                 </div>
              ) : (
-                <MarkdownText text={msg.text} />
+                <div className="text-sm leading-relaxed font-sans prose prose-invert prose-p:my-1 prose-headings:my-2 prose-strong:text-white prose-code:text-neon-blue prose-code:bg-white/10 prose-code:px-1 prose-code:rounded prose-code:font-mono prose-code:text-[10px] max-w-none">
+                    <ReactMarkdown 
+                        components={{
+                            a: ({node, ...props}) => {
+                                // Double-check href safety even inside markdown to prevent javascript: links
+                                if (!isSafeUrl(props.href as string)) {
+                                    return <span className="text-gray-500 line-through" title="Unsafe Link">{props.children}</span>;
+                                }
+                                return (
+                                    <a 
+                                        {...props} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="text-neon-blue hover:underline" 
+                                    />
+                                );
+                            },
+                            img: ({node, ...props}) => {
+                                // Strict sanitization for markdown images
+                                if (!isSafeUrl(props.src as string)) {
+                                    return null;
+                                }
+                                return (
+                                    <img 
+                                        {...props} 
+                                        className="rounded-lg border border-white/10 max-w-full h-auto my-2" 
+                                        loading="lazy" 
+                                        alt={props.alt || "AI Content"}
+                                    />
+                                );
+                            },
+                            // Add extra styling for code blocks
+                            code: ({node, ...props}) => (
+                                <code className="bg-white/10 text-neon-green px-1 py-0.5 rounded font-mono text-xs" {...props} />
+                            )
+                        }}
+                    >
+                        {msg.text}
+                    </ReactMarkdown>
+                </div>
              )}
 
              {/* Tool Call Result: Log Proposal */}
@@ -98,21 +101,24 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                  <AnalysisCard data={msg.toolCallPayload} onSave={() => onLogSave(msg.toolCallPayload!)} />
              )}
 
-             {/* Grounding Citations */}
+             {/* Safe Grounding Citations */}
              {msg.groundingUrls && msg.groundingUrls.length > 0 && (
                  <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap gap-2">
-                     {msg.groundingUrls.map((g, i) => (
-                         <a 
-                             key={i} 
-                             href={g.uri} 
-                             target="_blank" 
-                             rel="noopener noreferrer"
-                             className="text-[10px] flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-gray-400 hover:text-white transition-colors border border-white/5"
-                         >
-                             <ExternalLink className="w-2.5 h-2.5" />
-                             {g.title || new URL(g.uri).hostname}
-                         </a>
-                     ))}
+                     {msg.groundingUrls.map((g, i) => {
+                         if (!isSafeUrl(g.uri)) return null;
+                         return (
+                            <a 
+                                key={i} 
+                                href={g.uri} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-[10px] flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-gray-400 hover:text-white transition-colors border border-white/5"
+                            >
+                                <ExternalLink className="w-2.5 h-2.5" />
+                                {g.title || new URL(g.uri).hostname}
+                            </a>
+                         );
+                     })}
                  </div>
              )}
           </div>

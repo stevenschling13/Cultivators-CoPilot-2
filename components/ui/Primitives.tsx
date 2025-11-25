@@ -1,8 +1,114 @@
-
 import React, { memo, ReactNode, useMemo } from 'react';
 import { Haptic } from '../../utils/haptics';
 import { VpdZone } from '../../types';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Loader2 } from 'lucide-react';
+
+// --- NeonButton ---
+
+interface NeonButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
+  size?: 'sm' | 'md' | 'lg';
+  isLoading?: boolean;
+  icon?: React.ElementType;
+}
+
+export const NeonButton = memo(({ className = "", variant = 'primary', size = 'md', isLoading, icon: Icon, children, onClick, ...props }: NeonButtonProps) => {
+  const baseStyles = "relative rounded-xl font-bold font-mono uppercase tracking-wide transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group select-none";
+  
+  let variantStyles = "";
+  switch (variant) {
+    case 'primary':
+      variantStyles = "bg-neon-green text-black shadow-[0_0_20px_rgba(0,255,163,0.3)] hover:shadow-[0_0_30px_rgba(0,255,163,0.5)] border border-neon-green hover:bg-neon-green/90";
+      break;
+    case 'secondary':
+      variantStyles = "bg-[#1A1A1A] text-white border border-white/10 hover:bg-white/10 hover:border-white/20";
+      break;
+    case 'outline':
+      variantStyles = "bg-transparent text-neon-green border border-neon-green/50 hover:bg-neon-green/10";
+      break;
+    case 'danger':
+      variantStyles = "bg-alert-red/10 text-alert-red border border-alert-red/30 hover:bg-alert-red/20 shadow-[0_0_15px_rgba(255,0,85,0.1)]";
+      break;
+    case 'ghost':
+      variantStyles = "bg-transparent text-gray-400 hover:text-white hover:bg-white/5";
+      break;
+  }
+
+  const sizeStyles = {
+    sm: "px-3 py-1.5 text-xs",
+    md: "px-6 py-3 text-sm",
+    lg: "px-8 py-4 text-base"
+  }[size];
+
+  return (
+    <button 
+      className={`${baseStyles} ${variantStyles} ${sizeStyles} ${className}`}
+      onClick={(e) => { if (onClick && !isLoading) { Haptic.tap(); onClick(e); } }}
+      disabled={isLoading || props.disabled}
+      {...props}
+    >
+      {isLoading ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : (
+        <>
+          {Icon && <Icon className="w-4 h-4" />}
+          {children}
+        </>
+      )}
+      {/* Shine effect for primary */}
+      {variant === 'primary' && !isLoading && (
+        <div className="absolute inset-0 -translate-x-full group-hover:animate-shine bg-gradient-to-r from-transparent via-white/30 to-transparent z-10 pointer-events-none" />
+      )}
+    </button>
+  );
+});
+NeonButton.displayName = 'NeonButton';
+
+// --- StatusBadge ---
+
+interface StatusBadgeProps {
+  status: string;
+  size?: 'sm' | 'md';
+  pulse?: boolean;
+}
+
+export const StatusBadge = memo(({ status, size = 'md', pulse = false }: StatusBadgeProps) => {
+  const s = status.toUpperCase();
+  let colors = "bg-gray-800 text-gray-400 border-gray-700"; // Default
+  
+  if (['OPTIMAL', 'NOMINAL', 'CONNECTED', 'ACTIVE'].some(k => s.includes(k))) {
+    colors = "bg-neon-green/10 text-neon-green border-neon-green/20 shadow-[0_0_8px_rgba(0,255,163,0.1)]";
+  } else if (['CRITICAL', 'DANGER', 'OFFLINE', 'HIGH', 'SEVERE'].some(k => s.includes(k))) {
+    colors = "bg-alert-red/10 text-alert-red border-alert-red/20 shadow-[0_0_8px_rgba(255,0,85,0.1)]";
+  } else if (['WARNING', 'ATTENTION', 'LEECHING', 'MEDIUM'].some(k => s.includes(k))) {
+    colors = "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+  } else if (s.includes('VEG') || s.includes('VEGETATIVE')) {
+     colors = "bg-neon-green/5 text-neon-green border-neon-green/20";
+  } else if (s.includes('FLOWER')) {
+    colors = "bg-neon-blue/10 text-neon-blue border-neon-blue/20";
+  } else if (s.includes('CLONE')) {
+    colors = "bg-white/10 text-white border-white/20";
+  } else if (s.includes('DRYING')) {
+     colors = "bg-yellow-500/5 text-yellow-500 border-yellow-500/20";
+  } else if (s.includes('CURING')) {
+     colors = "bg-uv-purple/10 text-uv-purple border-uv-purple/20";
+  }
+
+  const sizeClasses = size === 'sm' ? "text-[9px] px-2 py-0.5" : "text-[10px] px-3 py-1";
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border font-mono font-bold uppercase tracking-wide select-none ${sizeClasses} ${colors}`}>
+      {pulse && (
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-current"></span>
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-current"></span>
+        </span>
+      )}
+      {status}
+    </span>
+  );
+});
+StatusBadge.displayName = 'StatusBadge';
 
 // --- MetricGauge ---
 
@@ -89,27 +195,34 @@ interface BentoCardProps extends React.HTMLAttributes<HTMLDivElement> {
   bgImage?: string;
   onClick?: () => void;
   headerAction?: ReactNode;
+  isLoading?: boolean;
 }
 
-export const BentoCard = memo(({ children, className = "", title, onClick, active, accent = "neon-green", bgImage, headerAction, ...props }: BentoCardProps) => {
+export const BentoCard = memo(({ children, className = "", title, onClick, active, accent = "neon-green", bgImage, headerAction, isLoading, ...props }: BentoCardProps) => {
   const borderColor = active ? `border-${accent}` : 'border-white/5';
+  const bgGradient = active 
+    ? `bg-gradient-to-br from-${accent}/5 to-transparent`
+    : 'bg-gradient-to-br from-white/5 to-transparent';
   
   return (
     <div 
-      onClick={() => { if (onClick) { Haptic.tap(); onClick(); } }}
-      onKeyDown={(e) => { if (onClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
+      onClick={() => { if (onClick && !isLoading) { Haptic.tap(); onClick(); } }}
+      onKeyDown={(e) => { if (onClick && !isLoading && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
       role={onClick ? "button" : "region"}
       tabIndex={onClick ? 0 : undefined}
       className={`
-        group relative overflow-hidden rounded-[24px] border bg-[#080808] transition-all duration-300
+        group relative overflow-hidden rounded-[24px] border bg-[#0A0A0A] transition-all duration-300
         ${borderColor}
-        ${onClick ? 'active:scale-[0.98] cursor-pointer hover:border-white/10 hover:bg-[#0C0C0C]' : ''}
+        ${onClick ? 'active:scale-[0.99] cursor-pointer hover:border-white/10 hover:bg-[#111]' : ''}
         ${className}
       `}
       {...props}
     >
+      {/* Active Background Gradient */}
+      <div className={`absolute inset-0 ${bgGradient} opacity-30 pointer-events-none transition-opacity duration-500`}></div>
+
       {/* Noise Texture */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay bg-noise z-0"></div>
+      <div className="absolute inset-0 opacity-[0.02] pointer-events-none mix-blend-overlay bg-noise z-0"></div>
 
       {/* Gloss Effect */}
       <div className="absolute -inset-[100%] top-0 block h-[200%] w-[50%] -rotate-12 bg-gradient-to-r from-transparent to-white/5 opacity-0 group-hover:animate-shine pointer-events-none z-10" />
@@ -117,7 +230,7 @@ export const BentoCard = memo(({ children, className = "", title, onClick, activ
       {bgImage && (
         <div className="absolute inset-0 z-0 pointer-events-none">
            <img src={bgImage} className="w-full h-full object-cover opacity-20 grayscale group-hover:grayscale-0 group-hover:scale-105 group-hover:opacity-30 transition-all duration-700" alt="" aria-hidden="true" />
-           <div className="absolute inset-0 bg-gradient-to-t from-[#080808] via-[#080808]/90 to-[#080808]/40" />
+           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/90 to-[#0A0A0A]/40" />
         </div>
       )}
       
@@ -133,7 +246,13 @@ export const BentoCard = memo(({ children, className = "", title, onClick, activ
       )}
       
       <div className="relative z-10 h-full w-full">
-        {children}
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full min-h-[100px]">
+             <Loader2 className="w-6 h-6 text-gray-700 animate-spin" />
+          </div>
+        ) : (
+          children
+        )}
       </div>
     </div>
   );
@@ -153,10 +272,12 @@ export const StageProgressBar = ({ current, total, label }: { current: number, t
       </div>
       <div className="h-1.5 w-full bg-[#151515] rounded-full overflow-hidden border border-white/5">
         <div 
-          className="h-full bg-gradient-to-r from-neon-blue to-uv-purple shadow-[0_0_10px_rgba(189,0,255,0.3)] relative" 
+          className="h-full bg-gradient-to-r from-neon-blue to-uv-purple shadow-[0_0_10px_rgba(189,0,255,0.3)] relative transition-all duration-1000 ease-out" 
           style={{ width: `${percentage}%` }}
         >
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_2px,rgba(0,0,0,0.5)_2px)] bg-[size:4px_100%] opacity-20"></div>
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_2px,rgba(255,255,255,0.3)_2px)] bg-[size:4px_100%] opacity-30"></div>
+          {/* Pulse effect for active growth */}
+          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
         </div>
       </div>
     </div>
@@ -183,7 +304,7 @@ export const TrendSparkline = memo(({ data }: { data?: number[] }) => {
   if (!computedPoints) return null;
 
   return (
-    <div className="h-8 w-full opacity-60">
+    <div className="h-full w-full opacity-60">
       <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible" preserveAspectRatio="none">
         <defs>
           <linearGradient id="sparklineGradient" x1="0" y1="0" x2="1" y2="0">

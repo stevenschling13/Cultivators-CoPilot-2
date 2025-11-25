@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Send, Image as ImageIcon, Sparkles, X, Zap } from 'lucide-react';
+import { Send, Image as ImageIcon, Sparkles, X, Zap, Terminal, Plus } from 'lucide-react';
 import { ChatMessage, ChatAttachment, GrowLog, GrowSetup, PlantBatch, EnvironmentReading, CalculatedMetrics, LogProposal } from '../types';
 import { geminiService } from '../services/geminiService';
 import { dbService } from '../services/db';
@@ -158,14 +157,14 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
         },
         async (toolName, toolPayload) => {
            if (toolName === 'proposeLog') {
+               const proposal = toolPayload as unknown as LogProposal;
                setMessages(prev => {
                    const updated = prev.map(m => {
                        if (m.id === modelMsgId) {
-                           return { ...m, toolCallPayload: toolPayload };
+                           return { ...m, toolCallPayload: proposal };
                        }
                        return m;
                    });
-                   // Save completed model message with tool payload
                    const finalMsg = updated.find(m => m.id === modelMsgId);
                    if (finalMsg) dbService.saveChatMessage(finalMsg);
                    return updated;
@@ -174,7 +173,6 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
            } else if (toolName === 'openCamera') {
                Haptic.success();
                onOpenCamera();
-               // Save simple response
                const finalMsg = {
                    id: modelMsgId,
                    role: 'model' as const,
@@ -187,7 +185,6 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
         }
       );
 
-      // Post-stream save (Approximate for this architecture)
       setTimeout(() => {
           setMessages(currentMessages => {
               const lastMsg = currentMessages.find(m => m.id === modelMsgId);
@@ -213,7 +210,7 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] relative">
+    <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
       <ChatHeader 
          showContextDetails={showContextDetails} 
          setShowContextDetails={setShowContextDetails}
@@ -224,20 +221,20 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
       />
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 safe-area-bottom pb-24">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 safe-area-bottom pb-28 mask-gradient-top scroll-smooth">
          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50 px-6 text-center">
-               <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-6 border border-white/10">
-                  <Sparkles className="w-8 h-8 text-neon-green" />
+            <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-60 px-6 text-center animate-fade-in">
+               <div className="w-24 h-24 rounded-3xl bg-white/5 flex items-center justify-center mb-6 border border-white/10 shadow-[0_0_40px_rgba(255,255,255,0.03)]">
+                  <Terminal className="w-10 h-10 text-neon-green" />
                </div>
-               <p className="text-xs font-mono uppercase tracking-widest mb-8">Awaiting Input</p>
+               <p className="text-xs font-mono uppercase tracking-widest mb-8 text-gray-400">System Ready</p>
                
-               <div className="flex flex-wrap justify-center gap-2">
+               <div className="flex flex-wrap justify-center gap-3 max-w-sm">
                    {QUICK_PROMPTS.map(prompt => (
                        <button 
                           key={prompt}
                           onClick={() => handleSend(prompt)}
-                          className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all flex items-center gap-1.5"
+                          className="px-4 py-2 rounded-xl bg-[#111] border border-white/10 text-[10px] font-bold font-mono text-gray-400 hover:text-neon-green hover:border-neon-green/30 transition-all active:scale-95 flex items-center gap-2"
                        >
                            <Zap className="w-3 h-3" />
                            {prompt}
@@ -252,68 +249,74 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
          )}
          
          {/* Invisible element to scroll to */}
-         <div ref={messagesEndRef} />
+         <div ref={messagesEndRef} className="h-1" />
       </div>
 
       {/* Input Area */}
-      <div className="bg-[#080808]/90 backdrop-blur-xl border-t border-white/5 p-4 pb-safe-bottom absolute bottom-0 left-0 right-0 z-30">
-         {attachment && (
-            <div className="mb-2 flex items-center gap-2 bg-white/5 p-2 rounded-lg w-fit animate-slide-up border border-white/10">
-               <div className="w-8 h-8 rounded bg-black/50 overflow-hidden">
-                   <img src={attachment.url} className="w-full h-full object-cover" alt="preview" />
+      <div className="absolute bottom-0 left-0 right-0 z-30 px-4 pb-safe-bottom pt-2 bg-gradient-to-t from-black via-black/90 to-transparent">
+         <div className="glass-panel rounded-[24px] p-2 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all focus-within:border-neon-green/30 focus-within:shadow-[0_0_30px_rgba(0,255,163,0.1)] mb-4">
+            
+            {attachment && (
+               <div className="mx-2 mt-2 mb-2 flex items-center gap-3 bg-[#111] p-2 rounded-xl border border-white/10 animate-slide-up">
+                  <div className="w-12 h-12 rounded-lg bg-black/50 overflow-hidden border border-white/5 shrink-0">
+                      <img src={attachment.url} className="w-full h-full object-cover" alt="preview" />
+                  </div>
+                  <div className="flex flex-col flex-1 min-w-0">
+                      <span className="text-[10px] text-neon-green font-bold uppercase tracking-wide truncate">Analysis Mode</span>
+                      <span className="text-[9px] text-gray-500 font-mono truncate">Image appended to context</span>
+                  </div>
+                  <button onClick={() => setAttachment(undefined)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                     <X className="w-4 h-4 text-gray-400" />
+                  </button>
                </div>
-               <span className="text-[10px] text-gray-400 font-mono">Image Attached</span>
-               <button onClick={() => setAttachment(undefined)} className="p-1 hover:bg-white/10 rounded-full">
-                  <X className="w-3 h-3 text-gray-400" />
+            )}
+
+            <div className="flex items-end gap-2">
+               <button 
+                  onClick={() => { Haptic.tap(); fileInputRef.current?.click(); }}
+                  className={`p-3.5 rounded-2xl transition-all active:scale-95 ${attachment ? 'bg-neon-green/10 text-neon-green' : 'bg-transparent text-gray-400 hover:text-white hover:bg-white/5'}`}
+               >
+                  <Plus className="w-5 h-5" />
+               </button>
+               <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={handleImageUpload}
+               />
+               
+               <textarea 
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                     if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                     }
+                  }}
+                  placeholder="Ask Gemini..."
+                  className="flex-1 bg-transparent border-none text-white text-sm placeholder-gray-600 focus:ring-0 resize-none py-3.5 max-h-32 font-sans leading-relaxed"
+                  rows={1}
+               />
+
+               <button 
+                  onClick={() => handleSend()}
+                  disabled={(!input.trim() && !attachment) || isThinking}
+                  className={`
+                     p-3.5 rounded-2xl transition-all font-bold active:scale-95
+                     ${(!input.trim() && !attachment) || isThinking 
+                        ? 'bg-white/5 text-gray-600 cursor-not-allowed' 
+                        : 'bg-neon-green text-black shadow-[0_0_20px_rgba(0,255,163,0.3)] hover:bg-neon-green/90'}
+                  `}
+               >
+                  {isThinking ? (
+                     <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                     <Send className="w-5 h-5" />
+                  )}
                </button>
             </div>
-         )}
-
-         <div className="flex items-end gap-2 bg-[#121212] border border-white/10 rounded-2xl p-2 transition-colors focus-within:border-neon-green/30 focus-within:shadow-[0_0_15px_rgba(0,255,163,0.1)]">
-            <button 
-               onClick={() => { Haptic.tap(); fileInputRef.current?.click(); }}
-               className={`p-3 rounded-xl transition-colors ${attachment ? 'bg-neon-green/10 text-neon-green' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-            >
-               <ImageIcon className="w-5 h-5" />
-            </button>
-            <input 
-               type="file" 
-               ref={fileInputRef} 
-               className="hidden" 
-               accept="image/*" 
-               onChange={handleImageUpload}
-            />
-            
-            <textarea 
-               value={input}
-               onChange={(e) => setInput(e.target.value)}
-               onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                     e.preventDefault();
-                     handleSend();
-                  }
-               }}
-               placeholder="Ask Gemini..."
-               className="flex-1 bg-transparent border-none text-white text-sm placeholder-gray-600 focus:ring-0 resize-none py-3 max-h-32"
-               rows={1}
-            />
-
-            <button 
-               onClick={() => handleSend()}
-               disabled={(!input.trim() && !attachment) || isThinking}
-               className={`
-                  p-3 rounded-xl transition-all font-bold active:scale-95
-                  ${(!input.trim() && !attachment) || isThinking 
-                     ? 'bg-white/5 text-gray-600 cursor-not-allowed' 
-                     : 'bg-neon-green text-black shadow-[0_0_15px_rgba(0,255,163,0.3)] hover:bg-neon-green/90'}
-               `}
-            >
-               {isThinking ? (
-                  <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-               ) : (
-                  <Send className="w-5 h-5" />
-               )}
-            </button>
          </div>
       </div>
     </div>

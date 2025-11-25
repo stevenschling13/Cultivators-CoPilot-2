@@ -1,6 +1,15 @@
 
 import { dbService } from './db';
 import { CryptoService } from './cryptoService';
+import { PlantBatch, GrowLog, GrowSetup } from '../types';
+
+interface BackupPayload {
+  version: number;
+  timestamp: number;
+  batches: PlantBatch[];
+  logs: GrowLog[];
+  settings?: GrowSetup;
+}
 
 export class BackupService {
   
@@ -13,7 +22,7 @@ export class BackupService {
     const logs = await dbService.getLogs();
     const settings = await dbService.getSettings();
     
-    const fullDump = {
+    const fullDump: BackupPayload = {
       version: 1,
       timestamp: Date.now(),
       batches,
@@ -43,19 +52,23 @@ export class BackupService {
    */
   public static async restoreFromBackup(file: File, password: string): Promise<boolean> {
     try {
-      const decryptedData = await CryptoService.decryptData(file, password);
+      const decryptedData = (await CryptoService.decryptData(file, password)) as BackupPayload;
       
-      if (!decryptedData.version || !decryptedData.batches) {
+      if (!decryptedData || !decryptedData.version || !decryptedData.batches) {
         throw new Error("Invalid Backup Format");
       }
 
       // Restore Logic
-      for (const batch of decryptedData.batches) {
-        await dbService.updateBatch(batch);
+      if (Array.isArray(decryptedData.batches)) {
+        for (const batch of decryptedData.batches) {
+          await dbService.updateBatch(batch);
+        }
       }
       
-      for (const log of decryptedData.logs) {
-        await dbService.saveLog(log);
+      if (Array.isArray(decryptedData.logs)) {
+        for (const log of decryptedData.logs) {
+          await dbService.saveLog(log);
+        }
       }
 
       if (decryptedData.settings) {

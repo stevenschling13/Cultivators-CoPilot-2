@@ -1,267 +1,195 @@
-
-import React, { memo, useState } from 'react';
-import { Clock, CheckCircle2, ScanEye, Upload, Plus, Box, ArrowRight, Volume2, Mic, Droplet, FileText } from 'lucide-react';
-import { Haptic } from '../utils/haptics';
-import { FLIP_DATE } from '../constants';
-import { FacilityBriefing, Room, PlantBatch, LogProposal } from '../types';
-import { BentoCard } from './ui/Primitives';
+import React, { memo } from 'react';
+import { Plus, Mic, Volume2, Database, Upload } from 'lucide-react';
+import { FacilityBriefing, Room, PlantBatch } from '../types';
 import { RoomTile } from './ui/RoomTile';
-import { useAppController } from '../hooks/useAppController';
+import { BentoCard, SkeletonCard, StageProgressBar, StatusBadge } from './ui/Primitives';
+import { Haptic } from '../utils/haptics';
 
 interface DashboardViewProps {
   briefing: FacilityBriefing | null;
   rooms: Room[];
-  batches: PlantBatch[]; 
+  batches: PlantBatch[];
   onBackup: () => void;
   onImport: () => void;
   onCamera: () => void;
-  onSelectBatch: (batch: PlantBatch) => void;
-  onAddBatch?: () => void;
-  onAddRoom?: () => void;
-  onEditRoom?: (room: Room) => void;
-  onVoiceCommand?: () => void;
+  onSelectBatch: (b: PlantBatch) => void;
+  onAddBatch: () => void;
+  onAddRoom: () => void;
+  onEditRoom: (r: Room) => void;
+  onVoiceCommand: () => void;
 }
 
 export const DashboardView = memo(({ 
-  briefing, 
-  rooms, 
-  batches, 
-  onBackup, 
-  onImport, 
-  onCamera, 
-  onSelectBatch,
-  onAddBatch,
-  onAddRoom,
-  onEditRoom,
-  onVoiceCommand
+  briefing, rooms, batches, 
+  onBackup, onImport, onCamera, onSelectBatch, onAddBatch, onAddRoom, onEditRoom, onVoiceCommand 
 }: DashboardViewProps) => {
-  const daysSinceFlip = Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24));
-  const { actions } = useAppController(); 
-  const [showQuickActions, setShowQuickActions] = useState(false);
 
   const activeBatches = batches.filter(b => b.isActive !== false);
-  const isEmptyState = rooms.length === 0 && activeBatches.length === 0;
 
-  const handleQuickLog = (type: string) => {
-      Haptic.tap();
-      setShowQuickActions(false);
-      const batchId = activeBatches[0]?.id;
-      if (batchId) {
-          const proposal: LogProposal = {
-              actionType: type,
-              manualNotes: `Quick Log: ${type}`,
-          };
-          actions.handleLogProposal(proposal);
+  const getBriefingBorderColor = (status: string) => {
+      switch (status) {
+          case 'CRITICAL': return 'border-l-alert-red';
+          case 'ATTENTION': return 'border-l-yellow-500';
+          case 'OPTIMAL': 
+          default: return 'border-l-neon-green';
       }
   };
 
   return (
-    <div className="p-6 pt-safe-top pb-32 space-y-6 animate-fade-in relative min-h-screen">
-      <div className="flex justify-between items-center">
-         <div>
-            <h1 className="text-2xl font-black tracking-tight text-white mb-1">COMMAND CENTER</h1>
-            <div className="flex items-center gap-2 text-[10px] font-mono uppercase text-gray-500 tracking-widest">
-               <Clock className="w-3 h-3" />
-               <span>{new Date().toLocaleDateString()} • Day {daysSinceFlip}F</span>
+    <div className="p-4 sm:p-6 pt-safe-top animate-fade-in pb-32 space-y-8 max-w-7xl mx-auto">
+        
+        {/* Top Header */}
+        <div className="flex justify-between items-end">
+            <div>
+                <h1 className="text-3xl sm:text-4xl font-black tracking-tighter text-white mb-1 drop-shadow-xl font-sans">COMMAND CENTER</h1>
+                <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-neon-green rounded-full animate-pulse shadow-[0_0_8px_#00ffa3]"></span>
+                    Gemini 3 Pro Active
+                </div>
             </div>
-         </div>
-         <div className="flex gap-2">
-            {onVoiceCommand && (
-                <button 
-                  onClick={() => { Haptic.tap(); onVoiceCommand(); }}
-                  className="p-3 bg-[#111] text-neon-green border border-neon-green/20 rounded-full active:scale-95 transition-all hover:bg-neon-green/10 shadow-[0_0_15px_rgba(0,255,163,0.1)]"
-                  title="Field Agent"
-                >
-                    <Mic className="w-5 h-5" />
-                </button>
-            )}
-            {onAddBatch && (
-              <button 
-                onClick={() => { Haptic.tap(); onAddBatch(); }}
-                className="p-3 bg-[#111] rounded-full border border-white/10 hover:border-white/20 active:scale-95 transition-all"
-                title="New Run"
-              >
-                  <Plus className="w-5 h-5" />
-              </button>
-            )}
-         </div>
-      </div>
+            
+            <button 
+                onClick={() => { Haptic.tap(); onVoiceCommand(); }}
+                className="relative group p-4 bg-[#111] rounded-full border border-white/10 hover:border-neon-green/50 transition-all active:scale-95 shadow-lg"
+            >
+                <Mic className="w-6 h-6 text-white group-hover:text-neon-green transition-colors" />
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon-green opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-neon-green shadow-[0_0_5px_#00ffa3]"></span>
+                </span>
+            </button>
+        </div>
 
-      {isEmptyState ? (
-          <div className="bg-[#111] border border-dashed border-white/20 rounded-[32px] p-8 text-center space-y-6">
-              <div className="w-16 h-16 bg-neon-green/10 rounded-full flex items-center justify-center mx-auto">
-                 <Box className="w-8 h-8 text-neon-green" />
-              </div>
-              <div>
-                  <h2 className="text-xl font-bold text-white mb-2">Facility Initializing...</h2>
-                  <p className="text-gray-400 text-sm max-w-xs mx-auto">
-                      No grow rooms or active batches detected. Configure your digital twin to begin telemetry tracking.
-                  </p>
-              </div>
-              <div className="space-y-3">
-                  {onAddRoom && (
-                    <button 
-                        onClick={() => { Haptic.tap(); onAddRoom(); }}
-                        className="w-full py-3 bg-neon-green text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-neon-green/90 transition-colors"
-                    >
-                        Create Grow Room <ArrowRight className="w-4 h-4" />
-                    </button>
-                  )}
-                  {onAddBatch && (
-                    <button 
-                        onClick={() => { Haptic.tap(); onAddBatch(); }}
-                        className="w-full py-3 bg-white/5 text-white font-bold rounded-xl border border-white/10 hover:bg-white/10 transition-colors"
-                    >
-                        Plan First Batch
-                    </button>
-                  )}
-              </div>
-          </div>
-      ) : (
-        <>
-            {/* Facility Briefing Card - Optimized Layout */}
-            {briefing && (
-                <BentoCard 
-                    className="!bg-[#0A0A0A] !border-l-4 border-l-neon-green" 
-                    title="Facility Briefing"
-                    headerAction={
+        {/* Facility Briefing Card */}
+        {briefing ? (
+            <BentoCard 
+                className={`!bg-[#0A0A0A] !border-l-4 ${getBriefingBorderColor(briefing.status)} shadow-2xl`} 
+                title="FACILITY BRIEFING"
+                headerAction={
+                    <div className="flex items-center gap-2">
+                         <StatusBadge status={briefing.status} pulse={briefing.status === 'CRITICAL'} size="sm" />
                         <button 
-                            onClick={() => { Haptic.tap(); actions.playAudioBriefing(briefing.summary); }}
-                            className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-neon-green transition-colors"
-                            title="Play Audio Report"
+                            onClick={() => { Haptic.tap(); /* Play Audio */ }}
+                            className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 text-neon-green transition-colors active:scale-90"
                         >
                             <Volume2 className="w-4 h-4" />
                         </button>
-                    }
-                >
-                    <div className="px-5 pb-5">
-                        <div className="flex items-baseline justify-between mb-2">
-                            <p className="text-xs text-gray-300 leading-relaxed line-clamp-2 flex-1 mr-4">{briefing.summary}</p>
-                            <div className={`text-[10px] font-bold px-2 py-0.5 rounded border ${briefing.status === 'OPTIMAL' ? 'text-neon-green border-neon-green/30 bg-neon-green/5' : 'text-alert-red border-alert-red/30 bg-alert-red/5'}`}>
-                                {briefing.status}
-                            </div>
-                        </div>
-                        <div className="grid gap-2">
-                            {briefing.actionItems.slice(0, 2).map((item, i) => (
-                                <div key={i} className="flex gap-2 items-center text-[10px] text-gray-400 bg-white/5 px-3 py-2 rounded-lg border border-white/5">
-                                    <CheckCircle2 className="w-3 h-3 text-neon-blue shrink-0" />
-                                    <span className="truncate">{item}</span>
-                                </div>
-                            ))}
-                        </div>
                     </div>
-                </BentoCard>
-            )}
+                }
+            >
+                <div className="px-5 pb-5 pt-2">
+                    <p className="text-sm text-gray-300 leading-relaxed font-medium max-w-3xl mb-6">{briefing.summary}</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {briefing.actionItems.length > 0 ? briefing.actionItems.slice(0, 3).map((item, i) => (
+                            <div key={i} className="flex items-center justify-between bg-[#111] px-4 py-3 rounded-xl border border-white/5 hover:border-white/20 hover:bg-[#161616] transition-all group cursor-pointer active:scale-[0.99]">
+                                <div className="flex gap-3 items-center overflow-hidden flex-1 mr-2">
+                                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.priority === 'High' ? 'bg-alert-red shadow-[0_0_5px_#ff0055]' : 'bg-neon-blue'}`} />
+                                    <span className="text-xs text-gray-300 truncate group-hover:text-white transition-colors font-medium tracking-wide">{item.task}</span>
+                                </div>
+                                {item.dueDate && (
+                                    <span className="text-[9px] text-gray-600 font-mono whitespace-nowrap bg-black px-1.5 py-0.5 rounded border border-white/5">
+                                        {item.dueDate}
+                                    </span>
+                                )}
+                            </div>
+                        )) : (
+                            <div className="col-span-full text-[10px] text-gray-600 font-mono text-center py-4 border border-dashed border-white/5 rounded-xl bg-white/[0.02]">
+                                No pending actions
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </BentoCard>
+        ) : (
+            <SkeletonCard />
+        )}
 
-            {/* Rooms List */}
-            <div className="grid grid-cols-1 gap-4">
+        {/* Rooms Section */}
+        <section className="space-y-4">
+            <div className="flex justify-between items-center px-1">
+                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1 h-1 bg-gray-500 rounded-full"></span> Environments
+                </h2>
+                <button onClick={() => { Haptic.tap(); onAddRoom(); }} className="text-[10px] font-bold text-neon-blue hover:text-white transition-colors uppercase tracking-wider flex items-center gap-1 px-3 py-1.5 rounded-full hover:bg-white/5 bg-transparent border border-transparent hover:border-white/10">
+                    <Plus className="w-3 h-3" /> Add Room
+                </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {rooms.map(room => (
                     <RoomTile 
                         key={room.id} 
                         room={room} 
-                        onClick={(r) => {
-                            const batch = activeBatches.find(b => b.id === r.activeBatchId);
-                            if (batch) onSelectBatch(batch);
-                        }}
-                        onEdit={() => onEditRoom && onEditRoom(room)}
+                        onClick={() => onEditRoom(room)} 
+                        onEdit={onEditRoom} 
                     />
                 ))}
-                {onAddRoom && (
-                    <button
-                        onClick={() => { Haptic.tap(); onAddRoom(); }}
-                        className="w-full py-4 border border-dashed border-white/10 rounded-[24px] flex items-center justify-center gap-2 text-gray-500 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all"
-                    >
-                        <Box className="w-4 h-4" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Add Facility Room</span>
-                    </button>
-                )}
+            </div>
+        </section>
+
+        {/* Active Batches Section */}
+        <section className="space-y-4">
+            <div className="flex justify-between items-center px-1">
+                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1 h-1 bg-gray-500 rounded-full"></span> Active Cohorts
+                </h2>
             </div>
 
-            {/* Visual Scan & Actions Grid */}
-            <div className="grid grid-cols-2 gap-4">
-                {/* Visual Scan - Lens Aesthetic */}
-                <BentoCard 
-                    onClick={onCamera}
-                    className="h-32 relative overflow-hidden group !bg-[#050505] border-white/10"
-                >
-                    {/* Lens Effect */}
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,255,163,0.15)_0%,transparent_70%)] opacity-50 group-hover:opacity-80 transition-opacity"></div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-20 h-20 border border-neon-green/20 rounded-full flex items-center justify-center relative animate-[spin_10s_linear_infinite]">
-                            <div className="absolute inset-2 border border-neon-green/10 rounded-full border-dashed"></div>
-                        </div>
-                    </div>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
-                        <ScanEye className="w-8 h-8 text-neon-green drop-shadow-[0_0_10px_rgba(0,255,163,0.5)]" />
-                        <span className="text-xs font-bold text-white uppercase tracking-widest">VISUAL SCAN</span>
-                    </div>
-                </BentoCard>
-
-                {/* Import Data */}
-                <BentoCard 
-                    onClick={() => { Haptic.tap(); onImport(); }}
-                    className="h-32 flex flex-col items-center justify-center gap-3 !bg-[#111] hover:bg-white/5 transition-colors group border-white/10"
-                >
-                    <div className="p-3 rounded-full bg-white/5 group-hover:scale-110 transition-transform border border-white/5">
-                        <Upload className="w-6 h-6 text-neon-blue" />
-                    </div>
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest group-hover:text-white transition-colors">Import Legacy Data</span>
-                </BentoCard>
-            </div>
-
-            {/* Active Batches Grid */}
-            <div>
-                <h3 className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-3 px-2">Active Runs</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {activeBatches.map(batch => (
-                        <div 
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeBatches.map(batch => {
+                    const daysInStage = Math.floor((Date.now() - batch.startDate) / (1000 * 60 * 60 * 24));
+                    const totalDaysEst = batch.currentStage === 'Flowering' ? (batch.breederHarvestDays || 65) : 30; 
+                    
+                    return (
+                        <BentoCard 
                             key={batch.id}
-                            onClick={() => { Haptic.tap(); onSelectBatch(batch); }}
-                            className="bg-[#111] border border-white/5 rounded-2xl p-4 flex justify-between items-center active:scale-[0.98] transition-all hover:border-white/10 cursor-pointer group"
+                            title={batch.batchTag}
+                            className="p-5 !bg-[#111] min-h-[160px]"
+                            onClick={() => onSelectBatch(batch)}
+                            active={true}
+                            accent="neon-blue"
                         >
-                             <div>
-                                 <div className="flex items-center gap-2 mb-1">
-                                     <span className="text-[9px] font-bold text-black bg-neon-green px-1.5 py-0.5 rounded uppercase">{batch.batchTag}</span>
-                                     <span className="text-[9px] text-gray-500 font-mono uppercase">{batch.currentStage}</span>
-                                 </div>
-                                 <div className="text-sm font-bold text-white group-hover:text-neon-green transition-colors truncate max-w-[180px]">
-                                     {batch.strain}
-                                 </div>
-                             </div>
-                             <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-white transition-colors" />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </>
-      )}
+                            <div className="h-full flex flex-col justify-between">
+                                <div>
+                                    <div className="text-sm font-bold text-white mb-1 line-clamp-1">{batch.strain}</div>
+                                    <div className="text-[10px] text-gray-500 mb-4">{batch.soilMix}</div>
+                                </div>
+                                <div className="mt-auto">
+                                   <StageProgressBar 
+                                       current={daysInStage} 
+                                       total={totalDaysEst} 
+                                       label={batch.currentStage as string} 
+                                   />
+                                </div>
+                            </div>
+                        </BentoCard>
+                    );
+                })}
 
-      {/* Quick Actions FAB */}
-      <div className="fixed bottom-24 right-6 z-40">
-          {showQuickActions && (
-              <div className="absolute bottom-16 right-0 flex flex-col gap-2 mb-2 animate-slide-up items-end">
-                  {[
-                      { label: 'Water', icon: Droplet, color: 'bg-neon-blue text-black' },
-                      { label: 'Log Note', icon: FileText, color: 'bg-white text-black' }
-                  ].map((action) => (
-                      <button 
-                          key={action.label}
-                          onClick={() => handleQuickLog(action.label)}
-                          className={`flex items-center gap-3 px-4 py-2 rounded-full shadow-lg ${action.color} font-bold text-xs uppercase tracking-wider active:scale-95 transition-transform`}
-                      >
-                          {action.label}
-                          <action.icon className="w-4 h-4" />
-                      </button>
-                  ))}
-              </div>
-          )}
-          <button 
-              onClick={() => { Haptic.tap(); setShowQuickActions(!showQuickActions); }}
-              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(0,255,163,0.3)] transition-all active:scale-90 ${showQuickActions ? 'bg-white text-black rotate-45' : 'bg-neon-green text-black'}`}
-          >
-              <Plus className="w-6 h-6" />
-          </button>
-      </div>
+                {/* Quick Action Tile */}
+                <button 
+                    onClick={() => { Haptic.tap(); onAddBatch(); }}
+                    className="rounded-[24px] border border-dashed border-white/10 bg-[#0A0A0A] flex flex-col items-center justify-center gap-3 p-4 cursor-pointer hover:bg-white/5 hover:border-white/20 transition-all active:scale-[0.99] group min-h-[160px]"
+                >
+                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-neon-green/10 transition-colors border border-white/5">
+                        <Plus className="w-6 h-6 text-gray-500 group-hover:text-neon-green transition-colors" />
+                    </div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest group-hover:text-white transition-colors">Start New Run</span>
+                </button>
+            </div>
+        </section>
+
+        {/* Footer */}
+        <div className="pt-8 pb-4 flex justify-center gap-6 opacity-40 hover:opacity-100 transition-opacity">
+            <button onClick={onImport} className="flex items-center gap-2 text-[10px] font-mono text-gray-500 hover:text-white transition-colors uppercase tracking-wider">
+                <Upload className="w-3 h-3" /> Import Legacy
+            </button>
+            <div className="w-px h-3 bg-gray-700"></div>
+            <button onClick={onBackup} className="flex items-center gap-2 text-[10px] font-mono text-gray-500 hover:text-white transition-colors uppercase tracking-wider">
+                <Database className="w-3 h-3" /> Backup Data
+            </button>
+        </div>
     </div>
   );
 });

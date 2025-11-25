@@ -1,13 +1,5 @@
 
-
-export enum VpdZone {
-  DANGER = 'Danger',
-  TRANSPIRATION = 'Transpiration (Healthy)',
-  LEECHING = 'Leeching',
-  PROPAGATION = 'Propagation',
-  VEGETATIVE = 'Vegetative',
-  FLOWERING = 'Flowering'
-}
+export type AlertLevel = 'NOMINAL' | 'WARNING' | 'CRITICAL' | 'OFFLINE';
 
 export enum GrowStage {
   CLONE = 'Clone',
@@ -17,51 +9,32 @@ export enum GrowStage {
   CURING = 'Curing'
 }
 
-// 2025 Modernization: Union types for stricter AI categorization
-export type PestType = 'Spider Mites' | 'Thrips' | 'Aphids' | 'Fungus Gnats' | 'Russet Mites' | 'Leaf Miners' | 'Unknown' | string;
-export type DeficiencyType = 'Nitrogen' | 'Calcium' | 'Magnesium' | 'Phosphorus' | 'Potassium' | 'Iron' | 'Unknown' | string;
-
-export interface EnvironmentReading {
-  temperature: number;
-  humidity: number;
-  ppfd: number;
-  co2: number;
-  timestamp: number; // Unix
+export enum VpdZone {
+  DANGER = 'DANGER',
+  LEECHING = 'LEECHING', // Low VPD, low transpiration
+  TRANSPIRATION = 'TRANSPIRATION' // Optimal
 }
 
-export interface CalculatedMetrics {
-  vpd: number;
-  dli: number;
-  vpdStatus: VpdZone;
+export interface ArPreferences {
+  showColaCount: boolean;
+  showBiomass: boolean;
+  showHealth: boolean;
 }
 
-export interface PlantBatch {
-  id: string;
-  batchTag: string;
-  strain: string;
-  breeder?: string;
-  soilMix: string;
-  startDate: number;
-  currentStage: GrowStage | string;
-  notes?: string;
-  projectedHarvestDate?: number; // Unix timestamp for AI prediction
-  breederHarvestDays?: number;
-  isActive: boolean;
+export interface GrowSetup {
+  environmentType: string;
+  lightingType: string;
+  medium: string;
+  nutrients: string;
+  targetVpd: string;
+  leafTempOffset: number;
+  vpdNotifications: boolean;
+  integrations?: {
+    acInfinity?: boolean;
+    trolMaster?: boolean;
+  };
+  arPreferences: ArPreferences;
 }
-
-// AI Generated Strain Info
-export interface StrainInfo {
-  breeder: string;
-  floweringTimeDays: number;
-  lineage: string;
-  terpeneProfile: string;
-  stretchPotential: 'Low' | 'Medium' | 'High';
-  feedingRecommendation: string;
-}
-
-// --- COMMAND CENTER TYPES ---
-
-export type AlertLevel = 'NOMINAL' | 'WARNING' | 'CRITICAL' | 'OFFLINE';
 
 export interface RoomMetrics {
   temp: number;
@@ -83,65 +56,168 @@ export interface Room {
   metrics: RoomMetrics;
 }
 
+export interface BriefingAction {
+  task: string;
+  dueDate?: string;
+  priority: 'High' | 'Medium' | 'Low';
+}
+
 export interface FacilityBriefing {
   status: 'OPTIMAL' | 'ATTENTION' | 'CRITICAL';
   summary: string;
-  actionItems: string[];
+  actionItems: BriefingAction[];
   weatherAlert?: string;
   timestamp?: number; // Track when this briefing was generated
 }
 
-// ----------------------------
-
 export interface HarvestPrediction {
   predictedDate: number;
   confidence: number;
-  reasoning: string; // e.g. "Trichomes 10% Amber, accelerating ripening"
-  adjustmentDays: number; // e.g. +5 or -2
+  reasoning: string;
+  adjustmentDays: number;
 }
 
 export interface AiDiagnosis {
   healthScore: number;
-  detectedPests: PestType[];
-  nutrientDeficiencies: DeficiencyType[];
+  detectedPests: string[];
+  nutrientDeficiencies: string[];
   morphologyNotes: string;
   recommendations: string[];
-  progressionAnalysis?: string;
-  harvestPrediction?: HarvestPrediction;
+  progressionAnalysis: string;
   confidenceScore?: number;
+  harvestPrediction?: HarvestPrediction;
 }
 
 export interface GrowLog {
   id: string;
   plantBatchId: string;
   timestamp: number;
-  // Performance: Store a thumbnail for list views, full res only on detail
-  thumbnailUrl?: string; 
-  imageUrl?: string; 
-  videoUrl?: string;
-  videoAnalysis?: string;
-  aiDiagnosis?: AiDiagnosis;
+  actionType: string;
   manualNotes?: string;
-  voiceNoteTranscript?: string;
-  actionType?: 'Water' | 'Feed' | 'Defoliate' | 'Observation' | 'Other' | 'Pest Control' | 'Training' | 'Flush' | string;
+  thumbnailUrl?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  aiDiagnosis?: AiDiagnosis;
 }
 
-// --- RESEARCH TYPES ---
+export interface PlantBatch {
+  id: string;
+  batchTag: string;
+  strain: string;
+  breeder?: string;
+  soilMix: string;
+  startDate: number;
+  currentStage: string | GrowStage; 
+  notes: string;
+  projectedHarvestDate: number;
+  breederHarvestDays?: number;
+  isActive: boolean;
+}
+
+export interface EnvironmentReading {
+  temperature: number; // Fahrenheit
+  humidity: number;
+  ppfd: number;
+  co2: number;
+  timestamp: number;
+}
+
+export interface CalculatedMetrics {
+  vpd: number;
+  dli: number;
+  vpdStatus: VpdZone;
+}
+
+export interface ArOverlayData {
+  status: string;
+  guidance?: string;
+  criticalWarning?: string;
+  colaCount?: number;
+  biomassEstimate?: string;
+  healthStatus?: string;
+  stressLevel?: number;
+}
+
+export interface ChatAttachment {
+  type: 'image';
+  url: string;
+  mimeType: string;
+}
+
+export interface LogProposal {
+  actionType: string;
+  manualNotes: string;
+  healthScore?: number;
+  detectedPests?: string[];
+  nutrientDeficiencies?: string[];
+  recommendations?: string[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  timestamp: number;
+  attachment?: ChatAttachment;
+  isThinking?: boolean;
+  toolCallPayload?: LogProposal;
+  groundingUrls?: { uri: string; title?: string }[];
+}
+
+export interface GroundingMetadata {
+  groundingChunks?: { web?: { uri: string; title?: string } }[];
+}
+
+export interface ChatContext {
+  setup: GrowSetup;
+  environment?: EnvironmentReading;
+  metrics?: CalculatedMetrics;
+  batches: PlantBatch[];
+  recentLogs: GrowLog[];
+}
+
+export interface ScheduleItem {
+  task: string;
+  dueDate: string;
+  priority: 'High' | 'Medium' | 'Low';
+  reasoning: string;
+}
+
+export interface VoiceCommandResponse {
+  intent: 'NAVIGATE' | 'LOG' | 'QUERY';
+  targetView?: string;
+  logProposal?: LogProposal;
+  queryText?: string;
+  transcription: string;
+}
+
+export interface EnvironmentalTargets {
+  temp: string;
+  rh: string;
+  vpd: string;
+  reasoning: string;
+}
+
+export interface StrainInfo {
+  breeder: string;
+  lineage: string;
+  floweringTimeDays: number;
+  stretchPotential: string;
+  terpeneProfile: string;
+  feedingRecommendation: string;
+}
 
 export interface CohortAnalysis {
   trendSummary: string;
-  dominantIssue?: string;
   topPerformingStrain?: string;
   recommendedAction: string;
 }
-
-// --- ERROR HANDLING TYPES ---
 
 export type ErrorSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Breadcrumb {
   timestamp: number;
-  category: 'ui' | 'nav' | 'api' | 'system';
+  category: 'ui' | 'network' | 'system' | 'navigation';
   message: string;
   data?: any;
 }
@@ -158,126 +234,11 @@ export interface AppError {
   resolved: boolean;
 }
 
-// --- AR & GROUNDING TYPES ---
-
-export interface ArOverlayData {
-  status?: string;
-  colaCount?: number;
-  biomassEstimate?: string;
-  healthStatus?: string;
-  criticalWarning?: string;
-  stressLevel?: number; // 0-100, new for Gauge
-  guidance?: string; // "Move Closer", "Hold Steady"
-}
-
-export interface GroundingChunk {
-  web?: {
-    uri: string;
-    title: string;
-  };
-}
-
-export interface GroundingMetadata {
-  groundingChunks?: GroundingChunk[];
-}
-
-// ----------------------
-
-export interface LogProposal {
-  manualNotes: string;
-  actionType: string;
-  healthScore?: number;
-  detectedPests?: string[];
-  nutrientDeficiencies?: string[];
-  currentStage?: string;
-  recommendations?: string[];
-}
-
-// --- VOICE AGENT TYPES ---
-
-export type VoiceIntent = 'NAVIGATE' | 'LOG' | 'QUERY' | 'UNKNOWN';
-
-export interface VoiceCommandResponse {
-  intent: VoiceIntent;
-  targetView?: 'dashboard' | 'camera' | 'settings' | 'chat' | 'research';
-  logProposal?: LogProposal;
-  queryText?: string;
-  transcription: string;
-}
-
-// --- AI CONFIGURATION TYPES ---
-
-export interface EnvironmentalTargets {
-  temp: string;
-  rh: string;
-  vpd: string;
-  ppfd: string;
-  reasoning: string; // "High leaf temp offset recommended due to LED intensity"
-}
-
-export interface ScheduleItem {
-  task: string;
-  dueDate: string; // Relative like "In 2 days" or specific date
-  priority: 'High' | 'Medium' | 'Low';
-  reasoning: string;
-}
-
-// ----------------------
-
-export interface ChatAttachment {
-  type: 'image' | 'file';
-  url: string; // Base64 or URL
-  mimeType: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'model';
-  text: string;
-  timestamp: number;
-  isThinking?: boolean;
-  groundingUrls?: { uri: string; title: string }[];
-  attachment?: ChatAttachment;
-  toolCallPayload?: LogProposal; // Data returned by a tool call for UI rendering
-}
-
-export interface ArPreferences {
-  showColaCount: boolean;
-  showBiomass: boolean;
-  showHealth: boolean;
-}
-
-export interface GrowSetup {
-  environmentType: string;
-  lightingType: string;
-  medium: string;
-  nutrients: string;
-  targetVpd: string;
-  leafTempOffset: number; // New: Offset in Fahrenheit (e.g., -2 for LED)
-  vpdNotifications?: boolean;
-  lastConnectedDeviceId?: string;
-  arPreferences?: ArPreferences;
-  integrations?: {
-    acInfinity?: boolean;
-    trolMaster?: boolean;
-  };
-}
-
-export interface ChatContext {
-  setup: GrowSetup;
-  environment?: EnvironmentReading;
-  batches: PlantBatch[];
-  recentLogs: GrowLog[];
-  metrics?: CalculatedMetrics;
-}
-
-export type AspectRatio = "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
-
 export interface SensorDevice {
   id: string;
   name: string;
-  type: 'Govee' | 'SensorPush' | 'Pulse' | 'AC Infinity' | 'Generic';
-  connectionType: 'BLE' | 'WiFi' | 'Cloud';
+  type: string;
+  connectionType: 'BLE' | 'WiFi';
   isConnected: boolean;
   batteryLevel: number;
   lastReading?: EnvironmentReading;

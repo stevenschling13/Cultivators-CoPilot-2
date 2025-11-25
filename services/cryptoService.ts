@@ -1,4 +1,5 @@
 
+
 /**
  * CryptoService: Handles Zero-Knowledge Encryption
  * Uses Web Crypto API for AES-GCM 256-bit encryption.
@@ -42,7 +43,7 @@ export class CryptoService {
    * Encrypts a JSON object into a proprietary binary format
    * Format: [Salt (16b)][IV (12b)][Ciphertext]
    */
-  public static async encryptData(data: any, password: string): Promise<Blob> {
+  public static async encryptData(data: unknown, password: string): Promise<Blob> {
     const salt = window.crypto.getRandomValues(new Uint8Array(this.SALT_LENGTH));
     const iv = window.crypto.getRandomValues(new Uint8Array(this.IV_LENGTH));
     const key = await this.deriveKey(password, salt);
@@ -68,7 +69,7 @@ export class CryptoService {
   /**
    * Decrypts the proprietary binary format back to JSON
    */
-  public static async decryptData(blob: Blob, password: string): Promise<any> {
+  public static async decryptData(blob: Blob, password: string): Promise<unknown> {
     const buffer = await blob.arrayBuffer();
     const uint8 = new Uint8Array(buffer);
 

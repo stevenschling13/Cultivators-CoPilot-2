@@ -1,9 +1,6 @@
 
-
-
-
 import React, { memo, useState } from 'react';
-import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity, Archive, AlertTriangle, Edit2, CalendarClock, Sparkles } from 'lucide-react';
+import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity, Archive, Edit2, CalendarClock, Sparkles, Loader2 } from 'lucide-react';
 import { PlantBatch, GrowLog, ScheduleItem } from '../../types';
 import { FLIP_DATE, STAGE_INFO } from '../../constants';
 import { SwipeableLogItem } from '../SwipeableLogItem';
@@ -20,9 +17,12 @@ interface BatchDetailModalProps {
   logs: GrowLog[];
   onDeleteLog: (id: string) => void;
   onUpdateLog: (log: GrowLog) => void;
+  onLoadMore: () => void;
+  hasMore: boolean;
+  isLoading: boolean;
 }
 
-export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpdateLog }: BatchDetailModalProps) => {
+export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpdateLog, onLoadMore, hasMore, isLoading }: BatchDetailModalProps) => {
   const [editingLog, setEditingLog] = useState<GrowLog | null>(null);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showEditBatch, setShowEditBatch] = useState(false);
@@ -158,6 +158,7 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
         </div>
       </div>
 
+      {/* Content Body */}
       <div className="px-5 -mt-8 relative z-20 pb-32 space-y-6">
         {/* Harvest Projection Card */}
         <div className="bg-[#0A0A0A]/90 backdrop-blur-xl rounded-[24px] p-5 border border-white/10 shadow-2xl">
@@ -280,6 +281,26 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
                     <div className="text-xs text-gray-600 pl-6 py-4 font-mono border border-dashed border-white/10 rounded-xl text-center">NO EVENTS LOGGED</div>
                     )}
                 </div>
+
+                {/* Load More Button */}
+                {hasMore && (
+                    <div className="pt-8 pb-4 pl-6">
+                        <button 
+                            onClick={() => { Haptic.tap(); onLoadMore(); }}
+                            disabled={isLoading}
+                            className="w-full py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Retrieving...
+                                </>
+                            ) : (
+                                "Load More History"
+                            )}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
       </div>

@@ -241,15 +241,12 @@ class DbService {
     await this.readyPromise;
     const db = await this.dbPromise;
     const batches = await db.getAll('batches');
-    // Return ALL batches, let controller decide to filter by isActive
-    // This allows Historical views to work
     return batches; 
   }
 
   public async saveBatch(batch: PlantBatch) {
     await this.readyPromise;
     const db = await this.dbPromise;
-    // Ensure isActive defaults to true if missing
     if (batch.isActive === undefined) batch.isActive = true;
     await db.put('batches', batch);
   }
@@ -277,6 +274,25 @@ class DbService {
       return db.getAllFromIndex('logs', 'by-batch', batchId);
     }
     return db.getAll('logs');
+  }
+
+  /**
+   * Paginated Log Fetching for infinite scrolling support.
+   */
+  public async getLogsPaginated(batchId?: string, limit = 20, lastTimestamp?: number): Promise<GrowLog[]> {
+    await this.readyPromise;
+    const db = await this.dbPromise;
+    const range = lastTimestamp ? IDBKeyRange.upperBound(lastTimestamp, true) : undefined;
+    let cursor = await db.transaction('logs').store.index('by-timestamp').openCursor(range, 'prev');
+    
+    const results: GrowLog[] = [];
+    while (cursor && results.length < limit) {
+      if (!batchId || cursor.value.plantBatchId === batchId) {
+        results.push(cursor.value);
+      }
+      cursor = await cursor.continue();
+    }
+    return results;
   }
 
   public async getLatestLog(batchId: string): Promise<GrowLog | undefined> {
