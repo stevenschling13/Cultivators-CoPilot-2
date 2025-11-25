@@ -1,8 +1,10 @@
+
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { X, ZoomIn, Sliders, Scan, Target, Check, Activity, Leaf, Hash, RefreshCw, AlertCircle, Mic, MicOff } from 'lucide-react';
+import { X, ZoomIn, Sliders, Target, Mic, MicOff, Layers, Eye, Camera, Sparkles, Loader2, Activity, Save } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { Haptic } from '../utils/haptics';
-import { ArOverlayData, ArPreferences } from '../types';
+import { ArOverlayData, ArPreferences, RoomMetrics } from '../types';
+import { ArHud } from './ui/ArHud';
 
 interface CameraViewProps {
   onCapture: (file: File) => void;
@@ -11,21 +13,34 @@ interface CameraViewProps {
   autoStartAr?: boolean;
   arPreferences: ArPreferences;
   onUpdatePreferences: (prefs: ArPreferences) => void;
+  activeMetrics?: RoomMetrics | null;
+  onSaveArData?: (data: ArOverlayData) => void;
 }
 
 const AR_ANALYSIS_WIDTH = 480;
-const AR_FRAME_INTERVAL = 300; // ~3.3 FPS for better live tracking
+const AR_FRAME_INTERVAL = 300; // ~3.3 FPS to balance token usage/latency
 
-export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr = false, arPreferences, onUpdatePreferences }: CameraViewProps) => {
+type SpectrumMode = 'normal' | 'structure' | 'stress';
+type VisualizerMode = 'off' | 'bars' | 'wave' | 'circle';
+
+export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr = false, arPreferences, onUpdatePreferences, activeMetrics, onSaveArData }: CameraViewProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   
+  // Audio Visualizer Refs
+  const visualizerCanvasRef = useRef<HTMLCanvasElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const visualizerRafRef = useRef<number | null>(null);
+
   const [arMode, setArMode] = useState(false);
   const [arData, setArData] = useState<ArOverlayData | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>('off');
   const [transcript, setTranscript] = useState<string | null>(null);
+  const [spectrumMode, setSpectrumMode] = useState<SpectrumMode>('normal');
   
   const rafRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
@@ -33,15 +48,12 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
 
   const [zoom, setZoom] = useState(1);
   const [flashTrigger, setFlashTrigger] = useState(false);
+  const [isDeepScanning, setIsDeepScanning] = useState(false);
   
   const touchStartDist = useRef<number | null>(null);
   const startZoom = useRef(1);
 
   const [localPrefs, setLocalPrefs] = useState<ArPreferences>(arPreferences);
-
-  useEffect(() => {
-    setLocalPrefs(arPreferences);
-  }, [arPreferences]);
 
   const togglePref = (key: keyof ArPreferences) => {
     Haptic.light();
@@ -59,17 +71,16 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
 
     const startCamera = async () => {
       try {
-        // Request Audio and Video
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: 'environment', width: { ideal: 4096 }, height: { ideal: 2160 } },
-          audio: true // Important for Live Conversation
+          audio: true 
         });
 
         mediaStreamRef.current = stream;
 
         if (isMounted && videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.volume = 0; // Avoid feedback loop from local playback
+          videoRef.current.volume = 0; // Prevent feedback loop
         } else {
           stream.getTracks().forEach(track => track.stop());
         }
@@ -91,8 +102,168 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
       }
+      // Cleanup Audio Context
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      if (visualizerRafRef.current) cancelAnimationFrame(visualizerRafRef.current);
     };
   }, []);
+
+  // Audio Visualizer Logic
+  useEffect(() => {
+    if (visualizerMode !== 'off' && mediaStreamRef.current) {
+        if (!audioContextRef.current) {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            audioContextRef.current = new AudioContextClass();
+        }
+        const ctx = audioContextRef.current;
+        if (ctx.state === 'suspended') ctx.resume();
+
+        if (!analyserRef.current) {
+            const source = ctx.createMediaStreamSource(mediaStreamRef.current);
+            analyserRef.current = ctx.createAnalyser();
+            // Larger FFT for Wave/Circle to look good
+            analyserRef.current.fftSize = 2048;
+            source.connect(analyserRef.current);
+        }
+
+        const drawVisualizer = () => {
+            if (!visualizerCanvasRef.current || !analyserRef.current) return;
+            const canvas = visualizerCanvasRef.current;
+            const canvasCtx = canvas.getContext('2d');
+            if (!canvasCtx) return;
+
+            // Handle Resize
+            if (canvas.width !== canvas.offsetWidth || canvas.height !== canvas.offsetHeight) {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+            }
+
+            const bufferLength = analyserRef.current.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // BARS MODE (Frequency)
+            if (visualizerMode === 'bars') {
+                analyserRef.current.getByteFrequencyData(dataArray);
+                const barWidth = (canvas.width / bufferLength) * 2.5;
+                let x = 0;
+                // Optimize: only draw lower frequencies that matter for speech/ambient
+                const usefulBinCount = Math.floor(bufferLength * 0.7); 
+
+                for(let i = 0; i < usefulBinCount; i++) {
+                    const barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
+                    
+                    const gradient = canvasCtx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+                    gradient.addColorStop(0, 'rgba(0, 255, 163, 0.2)');
+                    gradient.addColorStop(1, 'rgba(0, 212, 255, 0.9)');
+
+                    canvasCtx.fillStyle = gradient;
+                    canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                    x += barWidth + 1;
+                }
+            } 
+            // WAVE MODE (Time Domain)
+            else if (visualizerMode === 'wave') {
+                analyserRef.current.getByteTimeDomainData(dataArray);
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = '#00ffa3';
+                canvasCtx.beginPath();
+
+                const sliceWidth = canvas.width * 1.0 / bufferLength;
+                let x = 0;
+
+                for(let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * canvas.height / 2;
+
+                    if(i === 0) canvasCtx.moveTo(x, y);
+                    else canvasCtx.lineTo(x, y);
+
+                    x += sliceWidth;
+                }
+                canvasCtx.stroke();
+            }
+            // CIRCLE MODE (Radial Frequency)
+            else if (visualizerMode === 'circle') {
+                analyserRef.current.getByteFrequencyData(dataArray);
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const radius = Math.min(centerX, centerY) * 0.4;
+                
+                canvasCtx.beginPath();
+                canvasCtx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                canvasCtx.stroke();
+
+                const usefulBinCount = 120; // Fewer bins for radial
+                const angleStep = (2 * Math.PI) / usefulBinCount;
+
+                for(let i = 0; i < usefulBinCount; i++) {
+                     const value = dataArray[i * 4]; // skip bins for spread
+                     const barHeight = (value / 255) * (canvas.height * 0.3);
+                     const angle = i * angleStep;
+                     
+                     const xStart = centerX + Math.cos(angle) * radius;
+                     const yStart = centerY + Math.sin(angle) * radius;
+                     const xEnd = centerX + Math.cos(angle) * (radius + barHeight);
+                     const yEnd = centerY + Math.sin(angle) * (radius + barHeight);
+
+                     canvasCtx.beginPath();
+                     canvasCtx.moveTo(xStart, yStart);
+                     canvasCtx.lineTo(xEnd, yEnd);
+                     canvasCtx.strokeStyle = `hsl(${(i / usefulBinCount) * 360}, 100%, 50%)`;
+                     canvasCtx.lineWidth = 2;
+                     canvasCtx.stroke();
+                }
+            }
+
+            visualizerRafRef.current = requestAnimationFrame(drawVisualizer);
+        };
+        drawVisualizer();
+    } else {
+        if (visualizerRafRef.current) cancelAnimationFrame(visualizerRafRef.current);
+        if (visualizerCanvasRef.current) {
+            // Clear canvas when stopped
+            const canvas = visualizerCanvasRef.current;
+            const ctx = canvas.getContext('2d');
+            ctx?.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    return () => {
+        if (visualizerRafRef.current) cancelAnimationFrame(visualizerRafRef.current);
+    };
+  }, [visualizerMode]);
+
+  const cycleSpectrum = () => {
+      Haptic.tap();
+      setSpectrumMode(prev => {
+          if (prev === 'normal') return 'structure';
+          if (prev === 'structure') return 'stress';
+          return 'normal';
+      });
+  };
+
+  const cycleVisualizer = () => {
+      Haptic.tap();
+      setVisualizerMode(prev => {
+          if (prev === 'off') return 'bars';
+          if (prev === 'bars') return 'wave';
+          if (prev === 'wave') return 'circle';
+          return 'off';
+      });
+  };
+
+  const getFilterStyle = () => {
+      switch(spectrumMode) {
+          case 'structure': return 'grayscale(100%) contrast(150%) brightness(110%)';
+          case 'stress': return 'invert(100%) hue-rotate(180deg) contrast(120%)'; // "Thermal-ish" look
+          default: return 'none';
+      }
+  };
 
   const toggleMic = () => {
      Haptic.tap();
@@ -140,7 +311,6 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
         return;
     }
     
-    // Frame Throttling
     if (timestamp - lastFrameTimeRef.current >= AR_FRAME_INTERVAL) {
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -153,6 +323,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
             const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
             if (ctx) {
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                // High quality JPEG for the model
                 const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
                 geminiService.sendLiveFrame(base64);
             }
@@ -165,28 +336,51 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
 
   const startArSession = async () => {
     setArMode(true);
-    setArData({ status: "CONNECTING..." });
+    setArData({ status: "CONNECTING...", guidance: "Initializing Vision Model" });
     Haptic.light();
     
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
     try {
-      // Pass the active media stream (with audio) to the service
       await geminiService.startLiveAnalysis(
         mediaStreamRef.current,
         (data) => setArData(data as ArOverlayData),
         (error) => {
-            console.error("AR Session Error", error);
+            console.error("AR Session Runtime Error", error);
             Haptic.error();
-            setArData({ status: "CONNECTION FAILED", criticalWarning: "Network Error" });
+            
+            // Semantic Error Mapping
+            let status = "CONNECTION LOST";
+            let warning = "Stream Interrupted";
+            const msg = error.message?.toLowerCase() || '';
+
+            if (msg.includes('quota') || msg.includes('429')) {
+                status = "QUOTA EXCEEDED";
+                warning = "Daily Limit Reached";
+            } else if (msg.includes('safety') || msg.includes('blocked')) {
+                status = "SAFETY BLOCK";
+                warning = "Visual Filter Triggered";
+            } else if (msg.includes('permission') || msg.includes('media')) {
+                status = "MEDIA ERROR";
+                warning = "Camera/Mic Access Lost";
+            } else if (msg.includes('auth') || msg.includes('401')) {
+                status = "AUTH FAILED";
+                warning = "Invalid API Key";
+            }
+
+            setArData({ 
+                status, 
+                criticalWarning: warning,
+                guidance: "Session Terminated" 
+            });
+            
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             geminiService.stopLiveAnalysis();
         },
         () => {
-            console.log("AR Session Closed Remotely");
             if (arMode) stopArSession();
         },
-        (text, isUser) => {
+        (text) => {
             setTranscript(text);
             if (transcriptTimeoutRef.current) clearTimeout(transcriptTimeoutRef.current);
             transcriptTimeoutRef.current = setTimeout(() => setTranscript(null), 4000);
@@ -196,10 +390,30 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
       lastFrameTimeRef.current = 0;
       rafRef.current = requestAnimationFrame(processArFrame);
 
-    } catch (e) {
-      console.error("Failed to start AR", e);
-      setArData({ status: "INIT FAILED" });
+    } catch (e: any) {
+      console.error("AR Init Error", e);
       Haptic.error();
+      
+      let status = "INIT FAILED";
+      let warning = "Startup Error";
+      const msg = e.message?.toLowerCase() || '';
+
+      if (msg.includes('429') || msg.includes('quota')) {
+          status = "QUOTA EXCEEDED";
+          warning = "Check API Limits";
+      } else if (msg.includes('401') || msg.includes('key')) {
+          status = "AUTH FAILED";
+          warning = "Invalid API Key";
+      } else if (msg.includes('permission') || msg.includes('device')) {
+          status = "ACCESS DENIED";
+          warning = "Check Camera Permissions";
+      }
+
+      setArData({ 
+          status, 
+          criticalWarning: warning,
+          guidance: "Unable to Start Session"
+      });
     }
   };
 
@@ -212,6 +426,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
+      // Capture full resolution
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
@@ -234,7 +449,48 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
     }
   };
 
-  const isErrorState = arData?.status?.includes('FAILED');
+  // Simulated Deep Scan Feature
+  const performDeepScan = async () => {
+      if (isDeepScanning) return;
+      setIsDeepScanning(true);
+      Haptic.tap();
+      // Simulate processing delay for "Deep" scan visual feedback before capture
+      setArData(prev => ({ ...prev, status: "DEEP SCANNING", guidance: "Hold Device Steady" }));
+      setTimeout(() => {
+          takePhoto(); // Trigger actual capture flow which leads to Gemini 3 Pro analysis
+          setIsDeepScanning(false);
+      }, 2000);
+  };
+
+  const handleSaveSnapshot = () => {
+      if (!arData || !onSaveArData) return;
+      Haptic.success();
+      setFlashTrigger(true);
+      setTimeout(() => setFlashTrigger(false), 250);
+      onSaveArData(arData);
+      stopArSession();
+  };
+
+  // Interactive HUD Metric Taps
+  const handleMetricSelect = (metric: string) => {
+      if (!arMode) return;
+      
+      const prompts: Record<string, string> = {
+          colaCount: "Focus on the visible colas. Are they developing normally for this stage? Estimate potential yield.",
+          biomass: "Analyze the canopy density (biomass). Is it too dense? Should I defoliate?",
+          health: "Provide a detailed health assessment. Look for any signs of nutrient burn or deficiency.",
+          stress: "Analyze the plant stress level. Look for heat stress (tacoing), light stress, or water issues.",
+          environment: "Correlate the current environment metrics with the visual state. Is the VPD appropriate?",
+          warning: "Explain the critical warning. What is the immediate remediation step?",
+          guidance: "Clarify the current guidance instruction."
+      };
+
+      const text = prompts[metric];
+      if (text) {
+          setTranscript(`Querying: ${metric.toUpperCase()}...`);
+          geminiService.sendLiveTextQuery(text);
+      }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col animate-fade-in" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}>
@@ -246,10 +502,20 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
           autoPlay 
           playsInline 
           muted 
-          className="absolute inset-0 w-full h-full object-cover transition-transform duration-100 ease-linear"
-          style={{ transform: `scale(${zoom})` }}
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-300 ease-linear"
+          style={{ 
+              transform: `scale(${zoom})`,
+              filter: getFilterStyle()
+          }}
         />
+        {/* Hidden capture canvas */}
         <canvas ref={canvasRef} className="hidden" />
+        
+        {/* Real-time Spectral Visualizer Overlay */}
+        <canvas 
+            ref={visualizerCanvasRef} 
+            className={`absolute bottom-0 left-0 right-0 w-full h-32 pointer-events-none z-40 transition-opacity duration-300 ${visualizerMode !== 'off' ? 'opacity-100' : 'opacity-0'}`} 
+        />
         
         {ghostImage && (
           <div className="absolute inset-0 pointer-events-none z-10 opacity-30 mix-blend-screen">
@@ -257,171 +523,36 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
           </div>
         )}
 
-        {/* AR HUD */}
-        {arMode && (
-          <div className="absolute inset-0 z-20 pointer-events-none p-6 pt-24">
-             <div className={`border rounded-xl p-4 backdrop-blur-sm transition-colors duration-300 ${isErrorState ? 'border-alert-red/30 bg-alert-red/5' : 'border-neon-green/30 bg-neon-green/5 shadow-[0_0_20px_rgba(0,255,163,0.1)]'}`}>
-                <div className="flex justify-between items-center mb-2">
-                   <div className="flex items-center gap-2">
-                      {isErrorState ? <AlertCircle className="w-4 h-4 text-alert-red" /> : <Scan className="w-4 h-4 text-neon-green animate-pulse" />}
-                      <span className={`text-xs font-mono font-bold uppercase tracking-wider ${isErrorState ? 'text-alert-red' : 'text-neon-green'}`}>Targeting System</span>
-                   </div>
-                   <div className="flex items-center gap-2">
-                       {/* Mic Status Indicator */}
-                       <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${micEnabled ? 'bg-neon-blue/20 text-neon-blue' : 'bg-gray-800 text-gray-500'}`}>
-                          {micEnabled ? <Mic className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
-                          <span className="text-[9px] font-bold">VOX</span>
-                       </div>
-                       <div className={`text-[10px] font-mono ${isErrorState ? 'text-alert-red font-bold' : 'text-neon-green'}`}>{arData?.status || "SCANNING"}</div>
-                   </div>
-                </div>
-                {arData && (
-                   <div className="space-y-1">
-                      {arPreferences.showColaCount && arData.colaCount !== undefined && (
-                        <div className="flex justify-between text-xs font-mono text-white animate-slide-up">
-                            <span>Colas:</span>
-                            <span className="font-bold text-neon-green">{arData.colaCount}</span>
-                        </div>
-                      )}
-                      {arPreferences.showBiomass && arData.biomassEstimate && (
-                        <div className="flex justify-between text-xs font-mono text-white animate-slide-up">
-                            <span>Density:</span>
-                            <span className="font-bold">{arData.biomassEstimate}</span>
-                        </div>
-                      )}
-                      {arPreferences.showHealth && arData.healthStatus && (
-                        <div className="flex justify-between text-xs font-mono text-white animate-slide-up">
-                            <span>Health:</span>
-                            <span className="font-bold">{arData.healthStatus}</span>
-                        </div>
-                      )}
-                      {arData.criticalWarning && (
-                         <div className="mt-2 text-xs font-bold text-alert-red bg-alert-red/20 px-2 py-1 rounded animate-pulse">
-                            WARNING: {arData.criticalWarning}
-                         </div>
-                      )}
-                   </div>
-                )}
-                
-                {isErrorState && (
-                    <div className="mt-4 flex justify-center pointer-events-auto">
-                        <button 
-                          onClick={startArSession}
-                          className="px-4 py-2 bg-alert-red text-white text-xs font-bold rounded-full shadow-lg active:scale-95 transition-transform flex items-center gap-2"
-                        >
-                          <RefreshCw className="w-3 h-3" />
-                          RETRY CONNECTION
-                        </button>
-                    </div>
-                )}
-             </div>
-             
-             {/* Live Transcript */}
-             {transcript && (
-                <div className="absolute bottom-32 left-6 right-6 text-center animate-slide-up">
-                    <div className="inline-block bg-black/60 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 text-white text-sm font-medium shadow-lg">
-                        {transcript}
-                    </div>
-                </div>
-             )}
+        {/* Advanced AR HUD with Interaction */}
+        {arMode && <ArHud data={arData} isScanning={true} metrics={activeMetrics} onMetricSelect={handleMetricSelect} />}
 
-             {!isErrorState && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border border-neon-green/30 rounded-lg flex items-center justify-center opacity-50">
-                    <Target className="w-8 h-8 text-neon-green/50" />
-                    <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-neon-green"></div>
-                    <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-neon-green"></div>
-                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-neon-green"></div>
-                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-neon-green"></div>
+        {/* Mode Indicator */}
+        <div className="absolute top-24 right-6 z-20 flex flex-col gap-2 items-end">
+            {spectrumMode !== 'normal' && (
+                <div className="bg-black/60 backdrop-blur px-2 py-1 rounded border border-white/20 text-[10px] font-mono text-white uppercase">
+                    FILTER: {spectrumMode}
                 </div>
-             )}
-          </div>
+            )}
+            {visualizerMode !== 'off' && (
+                <div className="bg-black/60 backdrop-blur px-2 py-1 rounded border border-neon-green/20 text-[10px] font-mono text-neon-green uppercase">
+                    VIZ: {visualizerMode}
+                </div>
+            )}
+        </div>
+
+        {/* Live Transcript */}
+        {transcript && arMode && (
+            <div className="absolute bottom-32 left-6 right-6 text-center animate-slide-up z-30">
+                <div className="inline-block bg-black/80 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 text-neon-green text-sm font-mono shadow-lg">
+                    > {transcript}
+                </div>
+            </div>
         )}
       </div>
 
-      {showSettings && (
-        <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
-           <div className="w-full max-w-sm bg-[#121212] border border-white/10 rounded-3xl p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Sliders className="w-5 h-5 text-neon-green" />
-                    HUD Configuration
-                 </h3>
-                 <button onClick={() => setShowSettings(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10">
-                    <X className="w-5 h-5 text-gray-400" />
-                 </button>
-              </div>
-              
-              <div className="space-y-4 mb-8">
-                 <div 
-                   onClick={() => togglePref('showColaCount')}
-                   className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 active:bg-white/10 transition-colors cursor-pointer"
-                 >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-neon-green/10">
-                            <Hash className="w-4 h-4 text-neon-green" />
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-white block">Cola Counter</span>
-                          <span className="text-[10px] text-gray-500 block">Track flower sites</span>
-                        </div>
-                    </div>
-                    <button className={`w-12 h-7 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-neon-green/50 ${localPrefs.showColaCount ? 'bg-neon-green shadow-[0_0_10px_rgba(0,255,163,0.3)]' : 'bg-gray-700'}`}>
-                       <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${localPrefs.showColaCount ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                 </div>
-                 
-                 <div 
-                   onClick={() => togglePref('showBiomass')}
-                   className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 active:bg-white/10 transition-colors cursor-pointer"
-                 >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-neon-green/10">
-                            <Leaf className="w-4 h-4 text-neon-green" />
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-white block">Biomass Density</span>
-                          <span className="text-[10px] text-gray-500 block">Structure analysis</span>
-                        </div>
-                    </div>
-                    <button className={`w-12 h-7 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-neon-green/50 ${localPrefs.showBiomass ? 'bg-neon-green shadow-[0_0_10px_rgba(0,255,163,0.3)]' : 'bg-gray-700'}`}>
-                       <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${localPrefs.showBiomass ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                 </div>
-
-                 <div 
-                   onClick={() => togglePref('showHealth')}
-                   className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 active:bg-white/10 transition-colors cursor-pointer"
-                 >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-neon-green/10">
-                            <Activity className="w-4 h-4 text-neon-green" />
-                        </div>
-                        <div>
-                           <span className="text-sm font-medium text-white block">Health Status</span>
-                           <span className="text-[10px] text-gray-500 block">Vigor & stress</span>
-                        </div>
-                    </div>
-                    <button className={`w-12 h-7 rounded-full transition-colors relative focus:outline-none focus:ring-2 focus:ring-neon-green/50 ${localPrefs.showHealth ? 'bg-neon-green shadow-[0_0_10px_rgba(0,255,163,0.3)]' : 'bg-gray-700'}`}>
-                       <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${localPrefs.showHealth ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                 </div>
-              </div>
-              
-              <button 
-                onClick={saveSettings}
-                className="w-full py-4 bg-neon-green text-black font-bold rounded-xl active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,255,163,0.3)] hover:bg-neon-green/90"
-              >
-                <Check className="w-5 h-5" />
-                Apply Changes
-              </button>
-           </div>
-        </div>
-      )}
-
-      {/* Controls */}
-      <div className="bg-black/80 backdrop-blur-xl p-6 pb-safe-bottom">
+      {/* Controls Layer */}
+      <div className="bg-black/80 backdrop-blur-xl p-6 pb-safe-bottom relative z-50">
         <div className="flex items-center justify-between mb-6 px-4">
-           {/* Zoom Control */}
            <div className="flex items-center gap-3 bg-white/10 rounded-full px-3 py-1.5 border border-white/5">
                <button onClick={() => setZoom(Math.max(1, zoom - 0.5))} className="p-1 text-gray-400 hover:text-white transition-colors"><ZoomIn className="w-4 h-4 rotate-180" /></button>
                <span className="text-xs font-mono font-bold w-8 text-center text-white">{zoom.toFixed(1)}x</span>
@@ -429,7 +560,22 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
            </div>
            
            <div className="flex gap-2">
-                {/* Mic Toggle */}
+                <button 
+                    onClick={cycleSpectrum}
+                    className={`p-2.5 rounded-full border active:scale-95 transition-all ${spectrumMode !== 'normal' ? 'bg-uv-purple/20 border-uv-purple text-uv-purple' : 'bg-white/10 border-white/5 text-gray-400'}`}
+                    title="Spectrum Filter"
+                >
+                    <Eye className="w-4 h-4" />
+                </button>
+
+                <button 
+                    onClick={cycleVisualizer}
+                    className={`p-2.5 rounded-full border active:scale-95 transition-all ${visualizerMode !== 'off' ? 'bg-neon-green/20 border-neon-green text-neon-green' : 'bg-white/10 border-white/5 text-gray-400'}`}
+                    title="Audio Visualizer"
+                >
+                    <Activity className="w-4 h-4" />
+                </button>
+
                 {arMode && (
                     <button 
                         onClick={toggleMic}
@@ -438,21 +584,14 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
                         {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
                     </button>
                 )}
-                {/* Settings */}
-                <button 
-                    onClick={() => { Haptic.tap(); setShowSettings(true); }}
-                    className="p-2.5 rounded-full bg-white/10 text-gray-400 hover:text-white border border-white/5 active:scale-95 transition-transform"
-                >
-                    <Sliders className="w-4 h-4" />
-                </button>
            </div>
 
-           {/* AR Toggle */}
            <button 
              onClick={() => { Haptic.tap(); arMode ? stopArSession() : startArSession(); }}
-             className={`px-4 py-1.5 rounded-full text-xs font-bold font-mono border transition-all shadow-lg ${arMode ? 'bg-neon-green text-black border-neon-green shadow-[0_0_15px_rgba(0,255,163,0.3)]' : 'bg-transparent text-white border-white/20'}`}
+             className={`px-4 py-1.5 rounded-full text-xs font-bold font-mono border transition-all shadow-lg flex items-center gap-2 ${arMode ? 'bg-neon-green text-black border-neon-green shadow-[0_0_15px_rgba(0,255,163,0.3)]' : 'bg-transparent text-white border-white/20'}`}
            >
-             {arMode ? 'AR ACTIVE' : 'AR OFF'}
+             <Target className="w-3 h-3" />
+             {arMode ? 'AR ON' : 'AR OFF'}
            </button>
         </div>
 
@@ -461,18 +600,67 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
             <X className="w-6 h-6" />
           </button>
 
+          {/* Main Trigger */}
           <button 
-            onClick={takePhoto}
-            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center relative active:scale-95 transition-transform shadow-[0_0_30px_rgba(255,255,255,0.2)]"
+            onClick={arMode ? performDeepScan : takePhoto}
+            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center relative active:scale-95 transition-transform shadow-[0_0_30px_rgba(255,255,255,0.2)] group"
           >
-             <div className="w-16 h-16 bg-white rounded-full"></div>
+             {isDeepScanning ? (
+                <div className="w-16 h-16 bg-neon-green rounded-full flex items-center justify-center animate-pulse">
+                    <Loader2 className="w-8 h-8 text-black animate-spin" />
+                </div>
+             ) : (
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors ${arMode ? 'bg-neon-blue' : 'bg-white'}`}>
+                    {arMode ? <Sparkles className="w-8 h-8 text-black" /> : <Camera className="w-8 h-8 text-black" />}
+                </div>
+             )}
           </button>
           
-          <button onClick={() => {}} className="p-4 rounded-full bg-transparent text-transparent pointer-events-none">
-             <X className="w-6 h-6" />
-          </button>
+          {arMode && arData && (
+             <button 
+                 onClick={handleSaveSnapshot} 
+                 className="p-4 rounded-full bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 transition-all active:scale-95 animate-slide-in-right"
+                 title="Pin Data"
+             >
+                 <Save className="w-6 h-6" />
+             </button>
+          )}
+
+          {!arMode && (
+             <button onClick={() => setShowSettings(true)} className="p-4 rounded-full bg-white/10 text-gray-300 hover:text-white hover:bg-white/20 transition-all active:scale-95">
+                <Sliders className="w-6 h-6" />
+             </button>
+          )}
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
+           <div className="w-full max-w-sm bg-[#121212] border border-white/10 rounded-3xl p-6 shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-neon-green" /> HUD Layers
+                 </h3>
+                 <button onClick={() => setShowSettings(false)} className="p-2 bg-white/5 rounded-full">
+                    <X className="w-5 h-5 text-gray-400" />
+                 </button>
+              </div>
+              
+              <div className="space-y-3 mb-6">
+                  {(['showColaCount', 'showBiomass', 'showHealth'] as const).map(key => (
+                      <div key={key} onClick={() => togglePref(key)} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                          <span className="text-sm text-white capitalize">{key.replace('show', '')}</span>
+                          <div className={`w-10 h-6 rounded-full relative transition-colors ${localPrefs[key] ? 'bg-neon-green' : 'bg-gray-700'}`}>
+                              <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${localPrefs[key] ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </div>
+                      </div>
+                  ))}
+              </div>
+              <button onClick={saveSettings} className="w-full py-3 bg-neon-green text-black font-bold rounded-xl">Apply</button>
+           </div>
+        </div>
+      )}
     </div>
   );
 });

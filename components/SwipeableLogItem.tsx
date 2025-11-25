@@ -94,9 +94,16 @@ export const SwipeableLogItem = ({
                     <span className="text-white font-bold text-sm truncate pr-2">{log.actionType}</span>
                     <div className="flex gap-2 items-center">
                       {log.aiDiagnosis && (
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-neon-green/10 text-neon-green font-mono border border-neon-green/20 whitespace-nowrap">
-                            SCORE {log.aiDiagnosis.healthScore}
-                        </span>
+                        <>
+                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-neon-green/10 text-neon-green font-mono border border-neon-green/20 whitespace-nowrap">
+                                SCORE {log.aiDiagnosis.healthScore}
+                            </span>
+                            {log.aiDiagnosis.confidenceScore !== undefined && (
+                                <span className="text-[9px] text-gray-500 font-mono hidden sm:inline-block">
+                                    {Math.round(log.aiDiagnosis.confidenceScore * 100)}% CONF
+                                </span>
+                            )}
+                        </>
                       )}
                     </div>
                 </div>

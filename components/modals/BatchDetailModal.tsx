@@ -1,10 +1,18 @@
+
+
+
+
 import React, { memo, useState } from 'react';
-import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity } from 'lucide-react';
-import { PlantBatch, GrowLog } from '../../types';
+import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity, Archive, AlertTriangle, Edit2, CalendarClock, Sparkles } from 'lucide-react';
+import { PlantBatch, GrowLog, ScheduleItem } from '../../types';
 import { FLIP_DATE, STAGE_INFO } from '../../constants';
 import { SwipeableLogItem } from '../SwipeableLogItem';
 import { LogEditModal } from './LogEditModal';
+import { BatchEditModal } from './BatchEditModal';
 import { Haptic } from '../../utils/haptics';
+import { useAppController } from '../../hooks/useAppController';
+import { geminiService } from '../../services/geminiService';
+import { BentoCard } from '../ui/Primitives';
 
 interface BatchDetailModalProps {
   batch: PlantBatch;
@@ -16,6 +24,13 @@ interface BatchDetailModalProps {
 
 export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpdateLog }: BatchDetailModalProps) => {
   const [editingLog, setEditingLog] = useState<GrowLog | null>(null);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [showEditBatch, setShowEditBatch] = useState(false);
+  const { actions } = useAppController(); 
+  
+  // Predictive Schedule State
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
 
   const daysInFlower = Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24));
   const daysLeft = batch.projectedHarvestDate 
@@ -30,6 +45,26 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
     setEditingLog(null);
   };
 
+  const handleArchive = () => {
+    Haptic.success();
+    actions.handleArchiveBatch(batch.id);
+  };
+
+  const loadPredictiveSchedule = async () => {
+      if (isLoadingSchedule || schedule.length > 0) return;
+      setIsLoadingSchedule(true);
+      Haptic.tap();
+      try {
+          const prediction = await geminiService.generateForwardSchedule(batch, logs);
+          setSchedule(prediction);
+          Haptic.success();
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setIsLoadingSchedule(false);
+      }
+  };
+
   return (
     <div className="fixed inset-0 z-[90] bg-[#050505] flex flex-col animate-slide-up overflow-y-auto safe-area-bottom safe-area-top">
       {editingLog && (
@@ -38,6 +73,45 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
           onSave={handleSaveEdit} 
           onClose={() => setEditingLog(null)} 
         />
+      )}
+
+      {showEditBatch && (
+          <BatchEditModal 
+             batch={batch}
+             onSave={actions.handleUpdateBatch}
+             onClose={() => setShowEditBatch(false)}
+          />
+      )}
+
+      {/* Archive Confirmation Overlay */}
+      {showArchiveConfirm && (
+          <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
+             <div className="bg-[#121212] border border-alert-red/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+                <div className="flex flex-col items-center text-center mb-6">
+                   <div className="w-16 h-16 bg-alert-red/10 rounded-full flex items-center justify-center mb-4">
+                       <Archive className="w-8 h-8 text-alert-red" />
+                   </div>
+                   <h3 className="text-xl font-bold text-white mb-2">Harvest & Archive?</h3>
+                   <p className="text-sm text-gray-400">
+                      This will move <span className="text-neon-green font-bold">{batch.strain}</span> to the historical database. It will be removed from the active dashboard.
+                   </p>
+                </div>
+                <div className="flex gap-3">
+                   <button 
+                     onClick={() => setShowArchiveConfirm(false)}
+                     className="flex-1 py-3 bg-white/5 rounded-xl text-white font-medium"
+                   >
+                     Cancel
+                   </button>
+                   <button 
+                     onClick={handleArchive}
+                     className="flex-1 py-3 bg-alert-red text-white rounded-xl font-bold shadow-[0_0_15px_rgba(255,0,85,0.4)]"
+                   >
+                     Confirm Harvest
+                   </button>
+                </div>
+             </div>
+          </div>
       )}
 
       {/* Hero Section */}
@@ -57,10 +131,19 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
         </button>
         
         <div className="absolute bottom-0 left-0 p-6 w-full z-10">
-           <div className="flex items-center gap-2 mb-3">
-             <div className="text-neon-green text-[10px] font-bold font-mono uppercase tracking-widest px-2 py-1 bg-neon-green/10 border border-neon-green/20 rounded backdrop-blur-md">{batch.batchTag}</div>
-             <div className="text-gray-400 text-[10px] font-mono uppercase border border-white/10 px-2 py-1 rounded bg-black/40 backdrop-blur-md">ID: {batch.id.slice(0,6)}</div>
+           <div className="flex items-center justify-between mb-3">
+               <div className="flex items-center gap-2">
+                 <div className="text-neon-green text-[10px] font-bold font-mono uppercase tracking-widest px-2 py-1 bg-neon-green/10 border border-neon-green/20 rounded backdrop-blur-md">{batch.batchTag}</div>
+                 <div className="text-gray-400 text-[10px] font-mono uppercase border border-white/10 px-2 py-1 rounded bg-black/40 backdrop-blur-md">ID: {batch.id.slice(0,6)}</div>
+               </div>
+               <button 
+                   onClick={() => { Haptic.tap(); setShowEditBatch(true); }}
+                   className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-white backdrop-blur-md transition-colors"
+               >
+                   <Edit2 className="w-4 h-4" />
+               </button>
            </div>
+           
            <h1 className="text-3xl font-bold text-white leading-tight mb-3 tracking-tight drop-shadow-lg">{batch.strain}</h1>
            <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-white/5 border border-white/10 backdrop-blur-md">
@@ -95,7 +178,42 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
            </div>
         </div>
 
-        {/* Target Matrix */}
+        {/* Predictive Schedule (Agentic) */}
+        {schedule.length > 0 ? (
+            <BentoCard className="p-5 !bg-[#111]" title="Forward Command">
+                <div className="space-y-4">
+                    {schedule.map((item, i) => (
+                        <div key={i} className="flex gap-3 items-start border-b border-white/5 last:border-0 pb-3 last:pb-0">
+                            <div className={`mt-0.5 p-1 rounded-full ${item.priority === 'High' ? 'bg-alert-red/20 text-alert-red' : 'bg-neon-blue/20 text-neon-blue'}`}>
+                                <CalendarClock className="w-3 h-3" />
+                            </div>
+                            <div>
+                                <div className="text-sm font-bold text-white flex justify-between w-full">
+                                    <span>{item.task}</span>
+                                    <span className="text-[10px] font-mono text-gray-500 uppercase">{item.dueDate}</span>
+                                </div>
+                                <p className="text-xs text-gray-400 mt-1">{item.reasoning}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </BentoCard>
+        ) : (
+            <button 
+                onClick={loadPredictiveSchedule}
+                disabled={isLoadingSchedule}
+                className="w-full py-4 bg-white/5 border border-white/10 rounded-[24px] flex items-center justify-center gap-2 hover:bg-white/10 transition-all disabled:opacity-50"
+            >
+                {isLoadingSchedule ? (
+                    <Sparkles className="w-4 h-4 animate-spin text-neon-blue" />
+                ) : (
+                    <CalendarClock className="w-4 h-4 text-neon-blue" />
+                )}
+                <span className="text-xs font-bold uppercase tracking-widest text-white">Generate Forward Schedule</span>
+            </button>
+        )}
+
+        {/* Target Matrix (Legacy/Static - Could be hidden if AI schedule is active, but kept for reference) */}
         <div className="bg-[#0A0A0A] rounded-[24px] p-5 border border-white/5">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Phase Targets</h3>
@@ -121,6 +239,15 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
                 {currentStageInfo.desc}
             </div>
         </div>
+
+        {/* Action: Archive */}
+        <button 
+           onClick={() => { Haptic.tap(); setShowArchiveConfirm(true); }}
+           className="w-full py-4 border border-dashed border-white/10 rounded-[24px] flex items-center justify-center gap-2 text-gray-500 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all"
+        >
+            <Archive className="w-4 h-4" />
+            <span className="text-xs font-bold uppercase tracking-widest">Complete & Archive Run</span>
+        </button>
 
         {/* Data Timeline */}
         <div>

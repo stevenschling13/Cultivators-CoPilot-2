@@ -1,12 +1,8 @@
+
 import React from 'react';
 import { CheckCircle2, XCircle, Info } from 'lucide-react';
 import { Haptic } from '../../utils/haptics';
-
-export interface ToastMsg {
-  id: string;
-  message: string;
-  type: 'success' | 'error' | 'info';
-}
+import { ToastMsg } from '../../types';
 
 export const ToastContainer = ({ toasts, removeToast }: { toasts: ToastMsg[], removeToast: (id: string) => void }) => {
   return (

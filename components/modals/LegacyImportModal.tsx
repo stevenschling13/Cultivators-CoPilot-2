@@ -1,9 +1,11 @@
+
 import React, { memo, useState } from 'react';
 import { Archive } from 'lucide-react';
 import { dbService } from '../../services/db';
 import { ImageUtils } from '../../services/imageUtils';
 import { GrowLog } from '../../types';
 import { Haptic } from '../../utils/haptics';
+import { generateUUID } from '../../utils/uuid';
 
 export const LegacyImportModal = memo(({ onClose, onImportComplete }: { onClose: () => void, onImportComplete: () => void }) => {
   const [files, setFiles] = useState<FileList | null>(null);
@@ -26,7 +28,7 @@ export const LegacyImportModal = memo(({ onClose, onImportComplete }: { onClose:
       const thumbnail = await ImageUtils.createThumbnail(compressed);
 
       const log: GrowLog = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         plantBatchId: targetBatchId,
         timestamp: date.getTime(),
         thumbnailUrl: thumbnail,

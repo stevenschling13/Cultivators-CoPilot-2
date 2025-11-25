@@ -1,12 +1,14 @@
 
-
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Send, Image as ImageIcon, Sparkles, ExternalLink, Terminal, ChevronUp, ChevronDown, Trash2, X } from 'lucide-react';
+import { Send, Image as ImageIcon, Sparkles, X, Zap } from 'lucide-react';
 import { ChatMessage, ChatAttachment, GrowLog, GrowSetup, PlantBatch, EnvironmentReading, CalculatedMetrics, LogProposal } from '../types';
 import { geminiService } from '../services/geminiService';
+import { dbService } from '../services/db';
 import { Haptic } from '../utils/haptics';
 import { ImageUtils } from '../services/imageUtils';
-import { AnalysisCard } from './ui/AnalysisCard';
+import { generateUUID } from '../utils/uuid';
+import { ChatHeader } from './chat/ChatHeader';
+import { MessageBubble } from './chat/MessageBubble';
 
 interface ChatInterfaceProps {
   context: GrowSetup;
@@ -15,149 +17,18 @@ interface ChatInterfaceProps {
   envReading?: EnvironmentReading | null;
   metrics?: CalculatedMetrics;
   onLogProposal: (log: LogProposal) => void;
+  onOpenCamera: () => void;
 }
 
-// --- Memoized Sub-Components to prevent Re-renders on 1Hz Telemetry ---
+const QUICK_PROMPTS = [
+    "Diagnose recent issues",
+    "Check VPD status",
+    "Log a watering event",
+    "Recommend nutrients",
+    "Analyze growth rate"
+];
 
-const ChatHeader = memo(({ 
-  showContextDetails, 
-  setShowContextDetails, 
-  envReading, 
-  metrics, 
-  batchesCount,
-  onClearHistory
-}: { 
-  showContextDetails: boolean, 
-  setShowContextDetails: (v: boolean) => void, 
-  envReading?: EnvironmentReading | null, 
-  metrics?: CalculatedMetrics, 
-  batchesCount: number,
-  onClearHistory: () => void
-}) => (
-  <div className="pt-safe-top bg-[#080808]/90 backdrop-blur-xl border-b border-white/5 z-30">
-     <div className="px-4 py-3 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-neon-green/10 rounded-lg border border-neon-green/30 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-neon-green" />
-            </div>
-            <div>
-                <h2 className="font-mono font-bold text-xs text-white tracking-widest uppercase">Copilot v3.1</h2>
-                <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-neon-green rounded-full animate-pulse shadow-[0_0_5px_currentColor]"></span>
-                    <span className="text-[9px] text-gray-500 font-mono uppercase">System Online</span>
-                </div>
-            </div>
-        </div>
-        <div className="flex items-center gap-2">
-            <button 
-               onClick={() => { Haptic.tap(); onClearHistory(); }}
-               className="p-1.5 rounded-md border border-white/10 bg-white/5 text-gray-400 hover:text-alert-red hover:bg-alert-red/10 transition-colors"
-               title="Clear Memory"
-            >
-                <Trash2 className="w-3 h-3" />
-            </button>
-            <button 
-               onClick={() => setShowContextDetails(!showContextDetails)}
-               className={`flex items-center gap-2 px-3 py-1.5 rounded-md border text-[10px] font-mono transition-all ${showContextDetails ? 'bg-neon-green/10 border-neon-green text-neon-green' : 'bg-white/5 border-white/10 text-gray-400'}`}
-            >
-                CONTEXT_STREAM
-                {showContextDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-        </div>
-     </div>
-
-     {showContextDetails && (
-        <div className="px-4 pb-4 animate-slide-down border-t border-white/5 pt-4 bg-[#0a0a0a]">
-           <div className="grid grid-cols-3 gap-2 font-mono">
-              <div className="p-2 bg-black border border-white/10 rounded">
-                  <div className="text-[8px] text-gray-500 uppercase mb-1">Temp/RH</div>
-                  <div className="text-[10px] text-neon-blue">{envReading ? `${envReading.temperature.toFixed(1)}° / ${envReading.humidity.toFixed(0)}%` : '--'}</div>
-              </div>
-              <div className="p-2 bg-black border border-white/10 rounded">
-                  <div className="text-[8px] text-gray-500 uppercase mb-1">VPD</div>
-                  <div className="text-[10px] text-neon-green">{metrics?.vpd.toFixed(2) || '--'} kPa</div>
-              </div>
-               <div className="p-2 bg-black border border-white/10 rounded">
-                  <div className="text-[8px] text-gray-500 uppercase mb-1">Batches</div>
-                  <div className="text-[10px] text-white">{batchesCount} Active</div>
-              </div>
-           </div>
-        </div>
-     )}
-  </div>
-));
-
-ChatHeader.displayName = 'ChatHeader';
-
-const MessageBubble = memo(({ msg, onLogSave }: { msg: ChatMessage, onLogSave: (log: LogProposal) => void }) => {
-  const isUser = msg.role === 'user';
-  
-  return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 animate-slide-up group`}>
-       <div className={`max-w-[85%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
-          
-          {/* Metadata / Name */}
-          <div className={`text-[10px] font-mono text-gray-500 mb-1 uppercase tracking-wider flex items-center gap-2 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-             <span className={isUser ? 'text-neon-blue' : 'text-neon-green'}>{isUser ? 'OPERATOR' : 'GEMINI 3 PRO'}</span>
-             <span>{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-          </div>
-
-          <div className={`
-             relative rounded-2xl p-4 border backdrop-blur-sm shadow-sm transition-all duration-300
-             ${isUser 
-                ? 'bg-neon-blue/10 border-neon-blue/20 rounded-tr-sm text-white' 
-                : 'bg-[#121212] border-white/10 rounded-tl-sm text-gray-200'}
-          `}>
-             {msg.attachment && (
-                <div className="mb-3 rounded-lg overflow-hidden border border-white/10 bg-black/50">
-                    <img src={msg.attachment.url} alt="Attachment" className="max-w-full h-auto max-h-48 object-contain mx-auto" />
-                </div>
-             )}
-
-             {msg.isThinking ? (
-                <div className="flex items-center gap-2 text-neon-green text-xs font-mono animate-pulse">
-                   <Terminal className="w-3 h-3" />
-                   <span>ANALYZING BIO-METRICS...</span>
-                </div>
-             ) : (
-                <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans">
-                   {msg.text}
-                </div>
-             )}
-
-             {/* Tool Call Result: Log Proposal */}
-             {msg.toolCallPayload && (
-                 <AnalysisCard data={msg.toolCallPayload} onSave={() => onLogSave(msg.toolCallPayload!)} />
-             )}
-
-             {/* Grounding Citations */}
-             {msg.groundingUrls && msg.groundingUrls.length > 0 && (
-                 <div className="mt-3 pt-3 border-t border-white/10 flex flex-wrap gap-2">
-                     {msg.groundingUrls.map((g, i) => (
-                         <a 
-                             key={i} 
-                             href={g.uri} 
-                             target="_blank" 
-                             rel="noopener noreferrer"
-                             className="text-[10px] flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-gray-400 hover:text-white transition-colors border border-white/5"
-                         >
-                             <ExternalLink className="w-2.5 h-2.5" />
-                             {g.title || new URL(g.uri).hostname}
-                         </a>
-                     ))}
-                 </div>
-             )}
-          </div>
-       </div>
-    </div>
-  );
-});
-
-MessageBubble.displayName = 'MessageBubble';
-
-// --- Main Component ---
-
-export const ChatInterface = memo(({ context, batches, logs, envReading, metrics, onLogProposal }: ChatInterfaceProps) => {
+export const ChatInterface = memo(({ context, batches, logs, envReading, metrics, onLogProposal, onOpenCamera }: ChatInterfaceProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -167,30 +38,28 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load History
+  // Load History from IndexedDB
   useEffect(() => {
-    try {
-        const saved = localStorage.getItem('chatHistory');
-        if (saved) {
-            setMessages(JSON.parse(saved));
-        } else {
-            // Initial Welcome Message
-            setMessages([{
-                id: 'init',
-                role: 'model',
-                text: "Systems Online. I have full access to your environment telemetry and batch history. Ready for diagnostic queries.",
-                timestamp: Date.now()
-            }]);
-        }
-    } catch(e) { console.error("History load failed", e); }
+    const loadHistory = async () => {
+        try {
+            const history = await dbService.getChatHistory(50);
+            if (history.length > 0) {
+                setMessages(history);
+            } else {
+                // Initial Welcome Message
+                const welcomeMsg: ChatMessage = {
+                    id: generateUUID(),
+                    role: 'model',
+                    text: "Systems Online. I have full access to your environment telemetry and batch history. Ready for diagnostic queries.",
+                    timestamp: Date.now()
+                };
+                setMessages([welcomeMsg]);
+                await dbService.saveChatMessage(welcomeMsg);
+            }
+        } catch(e) { console.error("History load failed", e); }
+    };
+    loadHistory();
   }, []);
-
-  // Save History
-  useEffect(() => {
-    if (messages.length > 0) {
-        localStorage.setItem('chatHistory', JSON.stringify(messages.slice(-50))); // Keep last 50
-    }
-  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -200,14 +69,16 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
     scrollToBottom();
   }, [messages, isThinking]);
 
-  const handleClearHistory = () => {
-    localStorage.removeItem('chatHistory');
-    setMessages([{
-        id: crypto.randomUUID(),
+  const handleClearHistory = async () => {
+    await dbService.clearChatHistory();
+    const newMsg: ChatMessage = {
+        id: generateUUID(),
         role: 'model',
         text: "Memory cleared. Starting fresh session.",
         timestamp: Date.now()
-    }]);
+    };
+    setMessages([newMsg]);
+    await dbService.saveChatMessage(newMsg);
     Haptic.success();
   };
 
@@ -229,25 +100,27 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
     }
   };
 
-  const handleSend = async () => {
-    if ((!input.trim() && !attachment) || isThinking) return;
+  const handleSend = async (textOverride?: string) => {
+    const textToSend = textOverride || input;
+    if ((!textToSend.trim() && !attachment) || isThinking) return;
 
     const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       role: 'user',
-      text: input,
+      text: textToSend,
       timestamp: Date.now(),
       attachment
     };
 
     setMessages(prev => [...prev, userMsg]);
+    dbService.saveChatMessage(userMsg);
     setInput('');
     setAttachment(undefined);
     setIsThinking(true);
     Haptic.tap();
 
     // Prepare Model Placeholder
-    const modelMsgId = crypto.randomUUID();
+    const modelMsgId = generateUUID();
     setMessages(prev => [...prev, {
         id: modelMsgId,
         role: 'model',
@@ -283,16 +156,47 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
                return m;
            }));
         },
-        (toolPayload) => {
-           setMessages(prev => prev.map(m => {
-               if (m.id === modelMsgId) {
-                   return { ...m, toolCallPayload: toolPayload };
-               }
-               return m;
-           }));
-           Haptic.success();
+        async (toolName, toolPayload) => {
+           if (toolName === 'proposeLog') {
+               setMessages(prev => {
+                   const updated = prev.map(m => {
+                       if (m.id === modelMsgId) {
+                           return { ...m, toolCallPayload: toolPayload };
+                       }
+                       return m;
+                   });
+                   // Save completed model message with tool payload
+                   const finalMsg = updated.find(m => m.id === modelMsgId);
+                   if (finalMsg) dbService.saveChatMessage(finalMsg);
+                   return updated;
+               });
+               Haptic.success();
+           } else if (toolName === 'openCamera') {
+               Haptic.success();
+               onOpenCamera();
+               // Save simple response
+               const finalMsg = {
+                   id: modelMsgId,
+                   role: 'model' as const,
+                   text: 'Opening optical scanner...',
+                   timestamp: Date.now(),
+                   isThinking: false
+               };
+               dbService.saveChatMessage(finalMsg);
+           }
         }
       );
+
+      // Post-stream save (Approximate for this architecture)
+      setTimeout(() => {
+          setMessages(currentMessages => {
+              const lastMsg = currentMessages.find(m => m.id === modelMsgId);
+              if (lastMsg && !lastMsg.isThinking) {
+                  dbService.saveChatMessage(lastMsg);
+              }
+              return currentMessages;
+          });
+      }, 1000);
 
     } catch (e) {
        console.error(e);
@@ -319,67 +223,101 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
          onClearHistory={handleClearHistory}
       />
 
-      <div className="flex-1 overflow-y-auto p-4 pb-32 no-scrollbar scroll-smooth">
-         {messages.map(m => (
-            <MessageBubble key={m.id} msg={m} onLogSave={onLogProposal} />
-         ))}
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 safe-area-bottom pb-24">
+         {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50 px-6 text-center">
+               <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-6 border border-white/10">
+                  <Sparkles className="w-8 h-8 text-neon-green" />
+               </div>
+               <p className="text-xs font-mono uppercase tracking-widest mb-8">Awaiting Input</p>
+               
+               <div className="flex flex-wrap justify-center gap-2">
+                   {QUICK_PROMPTS.map(prompt => (
+                       <button 
+                          key={prompt}
+                          onClick={() => handleSend(prompt)}
+                          className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all flex items-center gap-1.5"
+                       >
+                           <Zap className="w-3 h-3" />
+                           {prompt}
+                       </button>
+                   ))}
+               </div>
+            </div>
+         ) : (
+            messages.map(msg => (
+                <MessageBubble key={msg.id} msg={msg} onLogSave={onLogProposal} />
+            ))
+         )}
+         
+         {/* Invisible element to scroll to */}
          <div ref={messagesEndRef} />
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black to-transparent pb-safe-bottom z-30">
+      {/* Input Area */}
+      <div className="bg-[#080808]/90 backdrop-blur-xl border-t border-white/5 p-4 pb-safe-bottom absolute bottom-0 left-0 right-0 z-30">
          {attachment && (
-            <div className="mb-2 inline-flex items-center gap-2 bg-[#111] px-3 py-2 rounded-xl border border-white/10 animate-slide-up">
-                <img src={attachment.url} className="w-8 h-8 rounded object-cover" alt="preview" />
-                <span className="text-xs text-gray-400">Attached</span>
-                <button onClick={() => setAttachment(undefined)} className="ml-2 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
+            <div className="mb-2 flex items-center gap-2 bg-white/5 p-2 rounded-lg w-fit animate-slide-up border border-white/10">
+               <div className="w-8 h-8 rounded bg-black/50 overflow-hidden">
+                   <img src={attachment.url} className="w-full h-full object-cover" alt="preview" />
+               </div>
+               <span className="text-[10px] text-gray-400 font-mono">Image Attached</span>
+               <button onClick={() => setAttachment(undefined)} className="p-1 hover:bg-white/10 rounded-full">
+                  <X className="w-3 h-3 text-gray-400" />
+               </button>
             </div>
          )}
-         
-         <div className="flex items-end gap-2 bg-[#121212] border border-white/10 rounded-[24px] p-2 pl-4 shadow-2xl focus-within:border-neon-green/50 transition-colors">
+
+         <div className="flex items-end gap-2 bg-[#121212] border border-white/10 rounded-2xl p-2 transition-colors focus-within:border-neon-green/30 focus-within:shadow-[0_0_15px_rgba(0,255,163,0.1)]">
             <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="mb-2 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+               onClick={() => { Haptic.tap(); fileInputRef.current?.click(); }}
+               className={`p-3 rounded-xl transition-colors ${attachment ? 'bg-neon-green/10 text-neon-green' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
             >
-                <ImageIcon className="w-5 h-5" />
+               <ImageIcon className="w-5 h-5" />
             </button>
             <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/*" 
-                onChange={handleImageUpload}
+               type="file" 
+               ref={fileInputRef} 
+               className="hidden" 
+               accept="image/*" 
+               onChange={handleImageUpload}
             />
             
             <textarea 
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                    }
-                }}
-                placeholder="Ask Copilot about your grow..."
-                className="flex-1 bg-transparent text-white text-sm max-h-32 py-3 focus:outline-none placeholder-gray-600 resize-none font-sans"
-                rows={1}
+               value={input}
+               onChange={(e) => setInput(e.target.value)}
+               onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                     e.preventDefault();
+                     handleSend();
+                  }
+               }}
+               placeholder="Ask Gemini..."
+               className="flex-1 bg-transparent border-none text-white text-sm placeholder-gray-600 focus:ring-0 resize-none py-3 max-h-32"
+               rows={1}
             />
 
             <button 
-                onClick={handleSend}
-                disabled={(!input && !attachment) || isThinking}
-                className={`
-                   mb-1 p-3 rounded-full transition-all active:scale-90
-                   ${(!input && !attachment) || isThinking ? 'bg-white/5 text-gray-600' : 'bg-neon-green text-black shadow-[0_0_15px_rgba(0,255,163,0.4)]'}
-                `}
+               onClick={() => handleSend()}
+               disabled={(!input.trim() && !attachment) || isThinking}
+               className={`
+                  p-3 rounded-xl transition-all font-bold active:scale-95
+                  ${(!input.trim() && !attachment) || isThinking 
+                     ? 'bg-white/5 text-gray-600 cursor-not-allowed' 
+                     : 'bg-neon-green text-black shadow-[0_0_15px_rgba(0,255,163,0.3)] hover:bg-neon-green/90'}
+               `}
             >
-                {isThinking ? (
-                    <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                ) : (
-                    <Send className="w-5 h-5" />
-                )}
+               {isThinking ? (
+                  <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+               ) : (
+                  <Send className="w-5 h-5" />
+               )}
             </button>
          </div>
       </div>
     </div>
   );
-}
+});
+
+ChatInterface.displayName = 'ChatInterface';

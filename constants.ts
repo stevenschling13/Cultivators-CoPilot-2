@@ -1,6 +1,4 @@
-
-
-import { GrowSetup, PlantBatch, Room, AlertLevel } from "./types";
+import { GrowSetup, PlantBatch, Room, AlertLevel, GrowStage } from "./types";
 
 export const AI_RESPONSE_SCHEMA = {
   healthScore: "number (0-100)",
@@ -14,6 +12,12 @@ export const AI_RESPONSE_SCHEMA = {
 
 export const PHYTOPATHOLOGIST_INSTRUCTION = `
 You are an Expert Cannabis Agronomist and Plant Pathologist (Gemini 3 Pro Edition).
+
+### PROTOCOL: VISUAL DIAGNOSTICS (PRIORITY)
+**Visual inspection is primary.** If the user asks for a diagnosis, health check, or mentions a physical issue (spots, yellowing, pests, drooping):
+1. **ASK FOR A PHOTO** immediately if one is not provided.
+2. **USE THE TOOL:** Call the \`openCamera\` tool to help the user open their scanner.
+3. Do not guess based on text alone if visual evidence would be definitive.
 
 ### PROTOCOL: CONTEXT-AWARE DIAGNOSTICS
 You must adapt your analysis based on the specific grow medium and lights provided in the user's configuration.
@@ -38,12 +42,35 @@ You must adapt your analysis based on the specific grow medium and lights provid
 - **Output:** You must output RAW JSON matching the schema provided. Do not include markdown formatting like \`\`\`json.
 `;
 
+export const VOICE_COMMAND_INSTRUCTION = `
+You are the "Field Commander" Agent for a Cannabis Cultivation App.
+Your job is to classify raw voice transcripts into one of three intents:
+1. NAVIGATE: The user wants to go to a screen (Dashboard, Camera/Scan, Settings, Chat/Ask, Research/Lab).
+2. LOG: The user is dictating an observation or action (Watering, Feeding, Pruning). Extract the details into a JSON proposal.
+3. QUERY: The user is asking a question or for advice. Pass this to the Chat system.
+
+### JSON OUTPUT FORMAT
+{
+  "intent": "NAVIGATE" | "LOG" | "QUERY",
+  "targetView": "dashboard" | "camera" | "settings" | "chat" | "research" (Only for NAVIGATE),
+  "logProposal": { "actionType": "Water", "manualNotes": "..." } (Only for LOG),
+  "queryText": "..." (Only for QUERY),
+  "transcription": "The raw text of what was said"
+}
+
+### EXAMPLES
+- "Take me to settings" -> { "intent": "NAVIGATE", "targetView": "settings" }
+- "I just watered the blue pheno with 2 liters" -> { "intent": "LOG", "logProposal": { "actionType": "Water", "manualNotes": "Watered Blue Pheno with 2 liters" } }
+- "Why are the leaves yellowing?" -> { "intent": "QUERY", "queryText": "Why are the leaves yellowing?" }
+`;
+
 export const DEFAULT_GROW_SETUP: GrowSetup = {
   environmentType: 'Insulated Garage - 5x5 Tent (Maple Plain, MN)',
   lightingType: 'Sunmaster 670W (Center) + 2x SF1000 (Sides) - ~870W Total',
   medium: 'BuildASoil UCCR (Blue) / UCCR+FFOF (Green)',
   nutrients: 'Advanced Nutrients pH Perfect + Big Bud/Bud Candy',
   targetVpd: '1.2 - 1.5 kPa',
+  leafTempOffset: -2,
   vpdNotifications: true,
   arPreferences: {
     showColaCount: true,
@@ -70,7 +97,8 @@ export const MOCK_BATCHES: PlantBatch[] = [
     currentStage: 'Flowering',
     notes: 'Blue Pheno. Slow start, stout/bushy structure. 8-top manifold. Dark green foliage. Showing mild N fade (expected).',
     projectedHarvestDate: new Date('2025-11-23').getTime(), // based on timeline
-    breederHarvestDays: 63
+    breederHarvestDays: 63,
+    isActive: true
   },
   {
     id: 'green-pheno',
@@ -81,7 +109,8 @@ export const MOCK_BATCHES: PlantBatch[] = [
     currentStage: 'Flowering',
     notes: 'Green Pheno. Vigorous vertical growth. Needs heavier feed/Cal-Mag. Mild Mg deficiency visible mid-flower.',
     projectedHarvestDate: new Date('2025-11-23').getTime(),
-    breederHarvestDays: 63
+    breederHarvestDays: 63,
+    isActive: true
   }
 ];
 
@@ -92,9 +121,10 @@ export const MOCK_ROOMS: Room[] = [
   {
     id: 'tent-blue',
     name: 'Blue Pheno (Garage Left)',
-    stage: 'Flowering' as any,
+    stage: GrowStage.FLOWER,
     stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
     activeBatchId: 'blue-pheno',
+    sensorId: 'gov-h5075-88a1', // Mapped to Hardware Service Mock
     metrics: {
       temp: 71.3,
       rh: 48.9,
@@ -108,9 +138,10 @@ export const MOCK_ROOMS: Room[] = [
   {
     id: 'tent-green',
     name: 'Green Pheno (Garage Right)',
-    stage: 'Flowering' as any,
+    stage: GrowStage.FLOWER,
     stageDay: Math.floor((Date.now() - new Date(FLIP_DATE).getTime()) / (1000 * 60 * 60 * 24)), 
     activeBatchId: 'green-pheno',
+    sensorId: 'sp-ht1-b2', // Mapped to Hardware Service Mock
     metrics: {
       temp: 72.1,
       rh: 50.2,

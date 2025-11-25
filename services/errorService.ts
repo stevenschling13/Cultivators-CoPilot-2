@@ -1,8 +1,8 @@
 
-
 import { AppError, Breadcrumb, ErrorSeverity } from '../types';
 import { dbService } from './db';
 import { Haptic } from '../utils/haptics';
+import { generateUUID } from '../utils/uuid';
 
 /**
  * ErrorService: The "Black Box" Flight Recorder.
@@ -79,7 +79,7 @@ class ErrorService {
     
     const severity = context.severity || 'MEDIUM';
     const timestamp = Date.now();
-    const id = crypto.randomUUID();
+    const id = generateUUID();
 
     // 1. Console Output for Devs
     console.group(`[ErrorService] Captured ${severity} Error`);

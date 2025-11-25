@@ -39,12 +39,24 @@ export interface PlantBatch {
   id: string;
   batchTag: string;
   strain: string;
+  breeder?: string;
   soilMix: string;
   startDate: number;
   currentStage: GrowStage | string;
   notes?: string;
   projectedHarvestDate?: number; // Unix timestamp for AI prediction
   breederHarvestDays?: number;
+  isActive: boolean;
+}
+
+// AI Generated Strain Info
+export interface StrainInfo {
+  breeder: string;
+  floweringTimeDays: number;
+  lineage: string;
+  terpeneProfile: string;
+  stretchPotential: 'Low' | 'Medium' | 'High';
+  feedingRecommendation: string;
 }
 
 // --- COMMAND CENTER TYPES ---
@@ -67,6 +79,7 @@ export interface Room {
   stage: GrowStage;
   stageDay: number;
   activeBatchId?: string;
+  sensorId?: string; // Maps to hardwareService deviceId
   metrics: RoomMetrics;
 }
 
@@ -153,6 +166,8 @@ export interface ArOverlayData {
   biomassEstimate?: string;
   healthStatus?: string;
   criticalWarning?: string;
+  stressLevel?: number; // 0-100, new for Gauge
+  guidance?: string; // "Move Closer", "Hold Steady"
 }
 
 export interface GroundingChunk {
@@ -177,6 +192,37 @@ export interface LogProposal {
   currentStage?: string;
   recommendations?: string[];
 }
+
+// --- VOICE AGENT TYPES ---
+
+export type VoiceIntent = 'NAVIGATE' | 'LOG' | 'QUERY' | 'UNKNOWN';
+
+export interface VoiceCommandResponse {
+  intent: VoiceIntent;
+  targetView?: 'dashboard' | 'camera' | 'settings' | 'chat' | 'research';
+  logProposal?: LogProposal;
+  queryText?: string;
+  transcription: string;
+}
+
+// --- AI CONFIGURATION TYPES ---
+
+export interface EnvironmentalTargets {
+  temp: string;
+  rh: string;
+  vpd: string;
+  ppfd: string;
+  reasoning: string; // "High leaf temp offset recommended due to LED intensity"
+}
+
+export interface ScheduleItem {
+  task: string;
+  dueDate: string; // Relative like "In 2 days" or specific date
+  priority: 'High' | 'Medium' | 'Low';
+  reasoning: string;
+}
+
+// ----------------------
 
 export interface ChatAttachment {
   type: 'image' | 'file';
@@ -207,9 +253,14 @@ export interface GrowSetup {
   medium: string;
   nutrients: string;
   targetVpd: string;
+  leafTempOffset: number; // New: Offset in Fahrenheit (e.g., -2 for LED)
   vpdNotifications?: boolean;
   lastConnectedDeviceId?: string;
   arPreferences?: ArPreferences;
+  integrations?: {
+    acInfinity?: boolean;
+    trolMaster?: boolean;
+  };
 }
 
 export interface ChatContext {
@@ -225,8 +276,15 @@ export type AspectRatio = "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
 export interface SensorDevice {
   id: string;
   name: string;
-  type: 'Govee' | 'SensorPush' | 'Pulse' | 'Generic';
+  type: 'Govee' | 'SensorPush' | 'Pulse' | 'AC Infinity' | 'Generic';
+  connectionType: 'BLE' | 'WiFi' | 'Cloud';
   isConnected: boolean;
   batteryLevel: number;
   lastReading?: EnvironmentReading;
+}
+
+export interface ToastMsg {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info';
 }

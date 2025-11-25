@@ -1,8 +1,8 @@
 
-
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { PlantBatch, GrowLog, GrowSetup, AppError } from '../types';
-import { MOCK_BATCHES, DEFAULT_GROW_SETUP } from '../constants';
+import { PlantBatch, GrowLog, GrowSetup, AppError, ChatMessage, Room } from '../types';
+import { MOCK_BATCHES, DEFAULT_GROW_SETUP, MOCK_ROOMS } from '../constants';
+import { generateUUID } from '../utils/uuid';
 
 interface CultivatorDB extends DBSchema {
   batches: {
@@ -29,6 +29,17 @@ interface CultivatorDB extends DBSchema {
       'by-severity': string;
     };
   };
+  chat_history: {
+    key: string;
+    value: ChatMessage;
+    indexes: {
+        'by-timestamp': number;
+    }
+  };
+  rooms: {
+    key: string;
+    value: Room;
+  };
 }
 
 class DbService {
@@ -36,7 +47,7 @@ class DbService {
   private readyPromise: Promise<void>;
 
   constructor() {
-    this.dbPromise = openDB<CultivatorDB>('cultivator-db', 4, { 
+    this.dbPromise = openDB<CultivatorDB>('cultivator-db', 7, { 
       upgrade(db, oldVersion, newVersion, transaction) {
         // Reset stores for V3 to ensure custom data seeding applies cleanly
         if (oldVersion < 3) {
@@ -61,6 +72,27 @@ class DbService {
                errorStore.createIndex('by-severity', 'severity');
            }
         }
+
+        // Version 5: Backfill Green Pheno Data
+        if (oldVersion < 5) {
+            if (db.objectStoreNames.contains('batches')) transaction.objectStore('batches').clear();
+            if (db.objectStoreNames.contains('logs')) transaction.objectStore('logs').clear();
+        }
+
+        // Version 6: Chat History Persistence
+        if (oldVersion < 6) {
+           if (!db.objectStoreNames.contains('chat_history')) {
+              const chatStore = db.createObjectStore('chat_history', { keyPath: 'id' });
+              chatStore.createIndex('by-timestamp', 'timestamp');
+           }
+        }
+
+        // Version 7: Room Persistence (Dynamic Infrastructure)
+        if (oldVersion < 7) {
+            if (!db.objectStoreNames.contains('rooms')) {
+                db.createObjectStore('rooms', { keyPath: 'id' });
+            }
+        }
       },
     });
     this.readyPromise = this.seedDefaults();
@@ -71,15 +103,19 @@ class DbService {
       const db = await this.dbPromise;
       const count = await db.count('batches');
       if (count === 0) {
-        const tx = db.transaction(['batches', 'logs', 'settings'], 'readwrite');
+        const tx = db.transaction(['batches', 'logs', 'settings', 'rooms'], 'readwrite');
         
-        // 1. Batches
-        for (const batch of MOCK_BATCHES) await tx.objectStore('batches').put(batch);
+        // 1. Batches (Added isActive flag)
+        const activeBatches = MOCK_BATCHES.map(b => ({ ...b, isActive: true }));
+        for (const batch of activeBatches) await tx.objectStore('batches').put(batch);
         
         // 2. Settings
         await tx.objectStore('settings').put(DEFAULT_GROW_SETUP, 'main');
+        
+        // 3. Rooms (Seeding Mock Rooms)
+        for (const room of MOCK_ROOMS) await tx.objectStore('rooms').put(room);
 
-        // 3. Generate Historical Logs based on User Context
+        // 4. Generate Historical Logs based on User Context
         const logs: GrowLog[] = [];
         const blueId = MOCK_BATCHES[0].id;
         const greenId = MOCK_BATCHES[1].id;
@@ -96,7 +132,7 @@ class DbService {
 
         blueMilestones.forEach(m => {
             logs.push({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 plantBatchId: blueId,
                 timestamp: new Date(m.date).getTime(),
                 actionType: m.action,
@@ -117,7 +153,7 @@ class DbService {
 
         greenMilestones.forEach(m => {
             logs.push({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 plantBatchId: greenId,
                 timestamp: new Date(m.date).getTime(),
                 actionType: m.action,
@@ -148,12 +184,13 @@ class DbService {
         ];
 
         weeklyData.forEach(w => {
+            // Blue Pheno Log
             logs.push({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 plantBatchId: blueId,
                 timestamp: new Date(w.week_ending).getTime(),
                 actionType: 'Observation',
-                manualNotes: `Weekly Summary: ${w.Temp_F_avg.toFixed(1)}°F / ${w.RH_avg.toFixed(1)}% RH. VPD: ${w.VPD_avg} kPa.`,
+                manualNotes: `Weekly Summary (Left): ${w.Temp_F_avg.toFixed(1)}°F / ${w.RH_avg.toFixed(1)}% RH. VPD: ${w.VPD_avg} kPa.`,
                 aiDiagnosis: {
                    healthScore: w.VPD_avg > 1.5 || w.VPD_avg < 0.8 ? 75 : 95,
                    detectedPests: [],
@@ -161,6 +198,28 @@ class DbService {
                    morphologyNotes: "Environmental Checkpoint",
                    recommendations: [],
                    progressionAnalysis: "Stable",
+                   harvestPrediction: undefined
+                }
+            });
+
+            // Green Pheno Log (Simulated Microclimate - Garage Right)
+            const greenTemp = w.Temp_F_avg + 1.2;
+            const greenRh = w.RH_avg - 1.5;
+            const greenVpd = w.VPD_avg + 0.12; 
+
+            logs.push({
+                id: generateUUID(),
+                plantBatchId: greenId,
+                timestamp: new Date(w.week_ending).getTime(),
+                actionType: 'Observation',
+                manualNotes: `Weekly Summary (Right): ${greenTemp.toFixed(1)}°F / ${greenRh.toFixed(1)}% RH. VPD: ${greenVpd.toFixed(2)} kPa.`,
+                aiDiagnosis: {
+                   healthScore: greenVpd > 1.6 || greenVpd < 0.8 ? 78 : 96,
+                   detectedPests: [],
+                   nutrientDeficiencies: [],
+                   morphologyNotes: "Environmental Checkpoint - Vigorous uptake noted.",
+                   recommendations: [],
+                   progressionAnalysis: "Rapid Growth",
                    harvestPrediction: undefined
                 }
             });
@@ -177,16 +236,38 @@ class DbService {
     }
   }
 
+  // --- Batch Operations ---
   public async getBatches(): Promise<PlantBatch[]> {
     await this.readyPromise;
     const db = await this.dbPromise;
-    return db.getAll('batches');
+    const batches = await db.getAll('batches');
+    // Return ALL batches, let controller decide to filter by isActive
+    // This allows Historical views to work
+    return batches; 
   }
 
-  public async updateBatch(batch: PlantBatch) {
+  public async saveBatch(batch: PlantBatch) {
     await this.readyPromise;
     const db = await this.dbPromise;
+    // Ensure isActive defaults to true if missing
+    if (batch.isActive === undefined) batch.isActive = true;
     await db.put('batches', batch);
+  }
+
+  public async archiveBatch(id: string) {
+    await this.readyPromise;
+    const db = await this.dbPromise;
+    const batch = await db.get('batches', id);
+    if (batch) {
+        batch.isActive = false;
+        await db.put('batches', batch);
+    }
+  }
+
+  // --- Log Operations ---
+
+  public async updateBatch(batch: PlantBatch) {
+    await this.saveBatch(batch);
   }
 
   public async getLogs(batchId?: string): Promise<GrowLog[]> {
@@ -217,6 +298,7 @@ class DbService {
     await db.delete('logs', id);
   }
 
+  // --- Settings ---
   public async getSettings(): Promise<GrowSetup> {
     await this.readyPromise;
     const db = await this.dbPromise;
@@ -229,14 +311,33 @@ class DbService {
     await db.put('settings', settings, 'main');
   }
 
+  // --- Room Operations ---
+  public async getRooms(): Promise<Room[]> {
+      await this.readyPromise;
+      const db = await this.dbPromise;
+      const rooms = await db.getAll('rooms');
+      if (!rooms || rooms.length === 0) return MOCK_ROOMS; // Fallback during migration
+      return rooms;
+  }
+
+  public async saveRoom(room: Room) {
+      await this.readyPromise;
+      const db = await this.dbPromise;
+      await db.put('rooms', room);
+  }
+
+  public async deleteRoom(id: string) {
+      await this.readyPromise;
+      const db = await this.dbPromise;
+      await db.delete('rooms', id);
+  }
+
   // --- Error Logging ---
   public async logError(error: AppError) {
     try {
-        // Don't wait for readyPromise to avoid loops if init fails
         const db = await this.dbPromise;
         await db.put('sys_errors', error);
     } catch (e) {
-        // Fallback to console if DB write fails (catastrophic failure)
         console.error("Critical: Failed to log error to DB", e);
     }
   }
@@ -244,9 +345,32 @@ class DbService {
   public async getRecentErrors(limit = 50): Promise<AppError[]> {
       await this.readyPromise;
       const db = await this.dbPromise;
-      // Get all and sort manual since IDB index traversal is verbose for simple limits
       const all = await db.getAll('sys_errors');
       return all.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+  }
+
+  // --- Chat History ---
+  public async saveChatMessage(msg: ChatMessage) {
+      try {
+          await this.readyPromise;
+          const db = await this.dbPromise;
+          await db.put('chat_history', msg);
+      } catch (e) {
+          console.error("Failed to save chat message", e);
+      }
+  }
+
+  public async getChatHistory(limit = 50): Promise<ChatMessage[]> {
+      await this.readyPromise;
+      const db = await this.dbPromise;
+      const all = await db.getAll('chat_history');
+      return all.sort((a, b) => a.timestamp - b.timestamp).slice(-limit);
+  }
+
+  public async clearChatHistory() {
+      await this.readyPromise;
+      const db = await this.dbPromise;
+      await db.clear('chat_history');
   }
 }
 
