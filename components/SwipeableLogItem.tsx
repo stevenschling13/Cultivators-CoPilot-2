@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Trash2, FileText } from 'lucide-react';
+import { Trash2, FileText, Edit2 } from 'lucide-react';
 import { GrowLog } from '../types';
 import { Haptic } from '../utils/haptics';
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Calendar, FileText, Activity, Edit3 } from 'lucide-react';
+import { X, Save, Calendar, FileText, Activity, Edit3 } from 'lucide-react';
 import { GrowLog } from '../../types';
 import { Haptic } from '../../utils/haptics';
 

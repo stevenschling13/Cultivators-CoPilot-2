@@ -37,7 +37,7 @@ export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
   }
   
   private handleReset = () => {
-    try { Haptic.tap(); } catch (error) { console.warn('Haptic feedback unavailable', error); }
+    try { Haptic.tap(); } catch(e) {}
     // In a real advanced system, we might try to reset specific state stores.
     // For now, a reload is the safest recovery.
     window.location.reload();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Beaker, Microscope, X, ShieldAlert, AlertTriangle, FileText, Sprout, CheckCircle2 } from 'lucide-react';
+import { Beaker, Microscope, X, ShieldAlert, AlertTriangle, FileText, Bug, Sprout, CheckCircle2 } from 'lucide-react';
 import { GrowLog } from '../../types';
 import { Haptic } from '../../utils/haptics';
 import { Card } from '../ui/Card';

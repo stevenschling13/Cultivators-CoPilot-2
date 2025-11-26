@@ -405,7 +405,7 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
         {transcript && arMode && (
             <div className="absolute bottom-32 left-6 right-6 text-center animate-slide-up z-30">
                 <div className="inline-block bg-black/80 backdrop-blur-md border border-white/10 rounded-xl px-4 py-2 text-neon-green text-sm font-mono shadow-lg">
-                    {'>'} {transcript}
+                    > {transcript}
                 </div>
             </div>
         )}
@@ -446,15 +446,8 @@ export const CameraView = memo(({ onCapture, onCancel, ghostImage, autoStartAr =
                 )}
            </div>
 
-           <button
-             onClick={() => {
-               Haptic.tap();
-               if (arMode) {
-                 stopArSession();
-               } else {
-                 startArSession();
-               }
-             }}
+           <button 
+             onClick={() => { Haptic.tap(); arMode ? stopArSession() : startArSession(); }}
              className={`px-4 py-1.5 rounded-full text-xs font-bold font-mono border transition-all shadow-lg flex items-center gap-2 ${arMode ? 'bg-neon-green text-black border-neon-green shadow-[0_0_15px_rgba(0,255,163,0.3)]' : 'bg-transparent text-white border-white/20'}`}
            >
              <Target className="w-3 h-3" />

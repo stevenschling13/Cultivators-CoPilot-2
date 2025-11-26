@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Bell, BellOff, Wifi, ThermometerSun, Sliders, Trash2, RotateCcw, Save, CloudCog } from 'lucide-react';
+import { Bell, BellOff, Wifi, Database, ThermometerSun, Sliders, Trash2, RotateCcw, Save, CloudCog } from 'lucide-react';
 import { Haptic } from '../utils/haptics';
 import { GrowSetup } from '../types';
 import { hardwareService } from '../services/hardwareService';
@@ -8,11 +8,12 @@ import { Card } from './ui/Card';
 interface SettingsViewProps {
   setup: GrowSetup;
   onUpdateSetup: (setup: GrowSetup) => void;
+  onBack: () => void;
   onRestore: () => void;
   onSaveConfig: () => void;
 }
 
-export const SettingsView = memo(({ setup, onUpdateSetup, onRestore, onSaveConfig }: SettingsViewProps) => {
+export const SettingsView = memo(({ setup, onUpdateSetup, onBack, onRestore, onSaveConfig }: SettingsViewProps) => {
   const toggleNotifications = () => {
      Haptic.tap();
      const newState = !setup.vpdNotifications;

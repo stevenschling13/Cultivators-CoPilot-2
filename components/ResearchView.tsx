@@ -257,7 +257,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
                         No logs found for this filter.
                     </div>
                 )}
-                {diagnosticLogs.slice().reverse().slice(0, 5).map((item) => (
+                {diagnosticLogs.slice().reverse().slice(0, 5).map((item, i) => (
                     <div 
                        key={item.id}
                        onClick={() => { Haptic.tap(); setSelectedLog(item.rawLog); }}

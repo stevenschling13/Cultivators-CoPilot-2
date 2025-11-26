@@ -1,6 +1,6 @@
 import React from 'react';
 import { LogProposal } from '../../types';
-import { Activity, Bug, CheckCircle2, PlusCircle, Leaf } from 'lucide-react';
+import { Activity, AlertTriangle, Bug, CheckCircle2, PlusCircle, Leaf } from 'lucide-react';
 import { Haptic } from '../../utils/haptics';
 
 interface AnalysisCardProps {

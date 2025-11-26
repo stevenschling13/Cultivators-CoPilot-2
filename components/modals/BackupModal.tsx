@@ -40,9 +40,8 @@ export const BackupModal = ({ mode, onClose, onConfirm }: BackupModalProps) => {
         setError(mode === 'restore' ? 'Decryption failed. Incorrect password or corrupt file.' : 'Backup creation failed.');
         Haptic.error();
       }
-    } catch (error) {
+    } catch (e) {
       setError('An unexpected error occurred.');
-      console.error(error);
     } finally {
       setLoading(false);
     }
