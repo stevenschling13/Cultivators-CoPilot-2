@@ -1,38 +1,89 @@
-import React, { memo, ReactNode, useMemo } from 'react';
+import React, { memo, ReactNode, useMemo, ButtonHTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes, HTMLAttributes, ElementType } from 'react';
 import { Haptic } from '../../utils/haptics';
 import { VpdZone } from '../../types';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, ChevronDown } from 'lucide-react';
+import { palette } from '../../theme/colors';
 
 // --- NeonButton ---
 
-interface NeonButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface NeonButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
-  icon?: React.ElementType;
+  icon?: ElementType;
+  className?: string;
+  children?: ReactNode;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  disabled?: boolean;
+  style?: React.CSSProperties;
 }
 
-export const NeonButton = memo(({ className = "", variant = 'primary', size = 'md', isLoading, icon: Icon, children, onClick, ...props }: NeonButtonProps) => {
+export const NeonButton = memo(({ className = "", variant = 'primary', size = 'md', isLoading, icon: Icon, children, onClick, style, ...props }: NeonButtonProps) => {
+  
+  const styleVars = useMemo(() => {
+    switch (variant) {
+      case 'primary':
+        return {
+          '--nb-bg': palette.neonGreen,
+          '--nb-text': palette.textDark,
+          '--nb-border': palette.neonGreen,
+          '--nb-shadow': `0 0 20px ${palette.neonGreen}4D`,
+          '--nb-hover-bg': `${palette.neonGreen}E6`, // 90%
+          '--nb-hover-shadow': `0 0 30px ${palette.neonGreen}80`,
+        };
+      case 'danger':
+        return {
+          '--nb-bg': `${palette.alertRed}1A`, // 10%
+          '--nb-text': palette.alertRed,
+          '--nb-border': `${palette.alertRed}4D`, // 30%
+          '--nb-shadow': `0 0 15px ${palette.alertRed}1A`,
+          '--nb-hover-bg': `${palette.alertRed}33`, // 20%
+          '--nb-hover-shadow': `0 0 20px ${palette.alertRed}33`,
+        };
+      case 'outline':
+        return {
+          '--nb-bg': 'transparent',
+          '--nb-text': palette.neonGreen,
+          '--nb-border': `${palette.neonGreen}80`, // 50%
+          '--nb-shadow': 'none',
+          '--nb-hover-bg': `${palette.neonGreen}1A`, // 10%
+          '--nb-hover-shadow': 'none',
+        };
+      case 'ghost':
+        return {
+          '--nb-bg': 'transparent',
+          '--nb-text': palette.textMuted,
+          '--nb-border': 'transparent',
+          '--nb-shadow': 'none',
+          '--nb-hover-bg': 'rgba(255,255,255,0.05)',
+          '--nb-hover-shadow': 'none',
+          '--nb-hover-text': palette.text,
+        };
+      case 'secondary':
+      default:
+        return {
+          '--nb-bg': palette.surfaceHighlight, // #1A1A1A
+          '--nb-text': palette.text,
+          '--nb-border': palette.border,
+          '--nb-shadow': 'none',
+          '--nb-hover-bg': palette.borderHighlight,
+          '--nb-hover-shadow': 'none',
+        };
+    }
+  }, [variant]);
+
   const baseStyles = "relative rounded-xl font-bold font-mono uppercase tracking-wide transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group select-none";
   
-  let variantStyles = "";
-  switch (variant) {
-    case 'primary':
-      variantStyles = "bg-neon-green text-black shadow-[0_0_20px_rgba(0,255,163,0.3)] hover:shadow-[0_0_30px_rgba(0,255,163,0.5)] border border-neon-green hover:bg-neon-green/90";
-      break;
-    case 'secondary':
-      variantStyles = "bg-[#1A1A1A] text-white border border-white/10 hover:bg-white/10 hover:border-white/20";
-      break;
-    case 'outline':
-      variantStyles = "bg-transparent text-neon-green border border-neon-green/50 hover:bg-neon-green/10";
-      break;
-    case 'danger':
-      variantStyles = "bg-alert-red/10 text-alert-red border border-alert-red/30 hover:bg-alert-red/20 shadow-[0_0_15px_rgba(255,0,85,0.1)]";
-      break;
-    case 'ghost':
-      variantStyles = "bg-transparent text-gray-400 hover:text-white hover:bg-white/5";
-      break;
-  }
+  // Using arbitrary values to bind to the CSS variables defined in styleVars
+  const dynamicStyles = `
+    bg-[var(--nb-bg)] 
+    text-[var(--nb-text)] 
+    border border-[var(--nb-border)] 
+    shadow-[var(--nb-shadow)] 
+    hover:bg-[var(--nb-hover-bg)] 
+    hover:shadow-[var(--nb-hover-shadow)]
+    ${variant === 'ghost' ? 'hover:text-[var(--nb-hover-text)]' : ''}
+  `;
 
   const sizeStyles = {
     sm: "px-3 py-1.5 text-xs",
@@ -42,7 +93,8 @@ export const NeonButton = memo(({ className = "", variant = 'primary', size = 'm
 
   return (
     <button 
-      className={`${baseStyles} ${variantStyles} ${sizeStyles} ${className}`}
+      className={`${baseStyles} ${dynamicStyles} ${sizeStyles} ${className}`}
+      style={{ ...styleVars, ...style } as React.CSSProperties}
       onClick={(e) => { if (onClick && !isLoading) { Haptic.tap(); onClick(e); } }}
       disabled={isLoading || props.disabled}
       {...props}
@@ -64,6 +116,96 @@ export const NeonButton = memo(({ className = "", variant = 'primary', size = 'm
 });
 NeonButton.displayName = 'NeonButton';
 
+// --- NeonInput ---
+
+export interface NeonInputProps extends InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  icon?: ElementType;
+  rightElement?: ReactNode;
+  className?: string;
+}
+
+export const NeonInput = memo(({ label, icon: Icon, rightElement, className = "", ...props }: NeonInputProps) => (
+  <div className="space-y-2">
+    {label && (
+      <label className="text-xs text-gray-500 uppercase font-mono tracking-wider flex items-center gap-2">
+        {Icon && <Icon className="w-3 h-3" />} {label}
+      </label>
+    )}
+    <div className="relative">
+      <input 
+        className={`w-full rounded-xl px-4 py-3 text-white transition-all placeholder-gray-700 focus:outline-none focus:ring-1 ${className}`}
+        style={{
+            backgroundColor: palette.surfaceDark,
+            borderColor: palette.border,
+            borderWidth: '1px'
+        }}
+        // Tailwind classes for focus states that are harder to inline style without state
+        // We use arbitrary values for specific palette overrides
+        onFocus={(e) => {
+            e.currentTarget.style.borderColor = palette.neonGreen;
+            e.currentTarget.style.boxShadow = `0 0 0 1px ${palette.neonGreen}80`;
+        }}
+        onBlur={(e) => {
+            e.currentTarget.style.borderColor = palette.border;
+            e.currentTarget.style.boxShadow = 'none';
+        }}
+        {...props}
+      />
+      {rightElement && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+           {rightElement}
+        </div>
+      )}
+    </div>
+  </div>
+));
+NeonInput.displayName = 'NeonInput';
+
+// --- NeonSelect ---
+
+export interface NeonSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label?: string;
+  icon?: ElementType;
+  options: { value: string | number; label: string }[];
+  className?: string;
+}
+
+export const NeonSelect = memo(({ label, icon: Icon, options, className = "", ...props }: NeonSelectProps) => (
+  <div className="space-y-2">
+    {label && (
+      <label className="text-xs text-gray-500 uppercase font-mono tracking-wider flex items-center gap-2">
+        {Icon && <Icon className="w-3 h-3" />} {label}
+      </label>
+    )}
+    <div className="relative">
+       <select
+          className={`w-full rounded-xl pl-4 pr-10 py-3 text-white transition-all appearance-none focus:outline-none ${className}`}
+          style={{
+            backgroundColor: palette.surfaceDark,
+            borderColor: palette.border,
+            borderWidth: '1px'
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = palette.neonGreen;
+            e.currentTarget.style.boxShadow = `0 0 0 1px ${palette.neonGreen}80`;
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = palette.border;
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          {...props}
+       >
+          {options.map(opt => (
+             <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+       </select>
+       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+    </div>
+  </div>
+));
+NeonSelect.displayName = 'NeonSelect';
+
 // --- StatusBadge ---
 
 interface StatusBadgeProps {
@@ -74,30 +216,56 @@ interface StatusBadgeProps {
 
 export const StatusBadge = memo(({ status, size = 'md', pulse = false }: StatusBadgeProps) => {
   const s = status.toUpperCase();
-  let colors = "bg-gray-800 text-gray-400 border-gray-700"; // Default
   
+  // Default Fallback
+  let bg = '#1f2937'; // gray-800
+  let text = '#9ca3af'; // gray-400
+  let border = '#374151'; // gray-700
+  let shadow = 'none';
+
   if (['OPTIMAL', 'NOMINAL', 'CONNECTED', 'ACTIVE'].some(k => s.includes(k))) {
-    colors = "bg-neon-green/10 text-neon-green border-neon-green/20 shadow-[0_0_8px_rgba(0,255,163,0.1)]";
+    bg = `${palette.neonGreen}1A`;
+    text = palette.neonGreen;
+    border = `${palette.neonGreen}33`;
+    shadow = `0 0 8px ${palette.neonGreen}1A`;
   } else if (['CRITICAL', 'DANGER', 'OFFLINE', 'HIGH', 'SEVERE'].some(k => s.includes(k))) {
-    colors = "bg-alert-red/10 text-alert-red border-alert-red/20 shadow-[0_0_8px_rgba(255,0,85,0.1)]";
+    bg = `${palette.alertRed}1A`;
+    text = palette.alertRed;
+    border = `${palette.alertRed}33`;
+    shadow = `0 0 8px ${palette.alertRed}1A`;
   } else if (['WARNING', 'ATTENTION', 'LEECHING', 'MEDIUM'].some(k => s.includes(k))) {
-    colors = "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+    bg = `${palette.warningYellow}1A`;
+    text = palette.warningYellow;
+    border = `${palette.warningYellow}33`;
   } else if (s.includes('VEG') || s.includes('VEGETATIVE')) {
-     colors = "bg-neon-green/5 text-neon-green border-neon-green/20";
+     bg = `${palette.neonGreen}0D`;
+     text = palette.neonGreen;
+     border = `${palette.neonGreen}33`;
   } else if (s.includes('FLOWER')) {
-    colors = "bg-neon-blue/10 text-neon-blue border-neon-blue/20";
+    bg = `${palette.neonBlue}1A`;
+    text = palette.neonBlue;
+    border = `${palette.neonBlue}33`;
   } else if (s.includes('CLONE')) {
-    colors = "bg-white/10 text-white border-white/20";
+    bg = `${palette.text}1A`;
+    text = palette.text;
+    border = `${palette.text}33`;
   } else if (s.includes('DRYING')) {
-     colors = "bg-yellow-500/5 text-yellow-500 border-yellow-500/20";
+     bg = `${palette.warningYellow}0D`;
+     text = palette.warningYellow;
+     border = `${palette.warningYellow}33`;
   } else if (s.includes('CURING')) {
-     colors = "bg-uv-purple/10 text-uv-purple border-uv-purple/20";
+     bg = `${palette.uvPurple}1A`;
+     text = palette.uvPurple;
+     border = `${palette.uvPurple}33`;
   }
 
   const sizeClasses = size === 'sm' ? "text-[9px] px-2 py-0.5" : "text-[10px] px-3 py-1";
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border font-mono font-bold uppercase tracking-wide select-none ${sizeClasses} ${colors}`}>
+    <span 
+        className={`inline-flex items-center gap-1.5 rounded-full border font-mono font-bold uppercase tracking-wide select-none ${sizeClasses}`}
+        style={{ backgroundColor: bg, color: text, borderColor: border, boxShadow: shadow }}
+    >
       {pulse && (
         <span className="relative flex h-1.5 w-1.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-current"></span>
@@ -125,26 +293,24 @@ export const MetricGauge = memo(({ label, value, unit, status, icon: Icon, trend
   const isDanger = status === VpdZone.DANGER;
   const isWarning = status === VpdZone.LEECHING;
   
-  let barColor = 'bg-neon-green';
-  let glowColor = 'shadow-[0_0_15px_rgba(0,255,163,0.4)]';
-  let textColor = 'text-neon-green';
+  let barColor: string = palette.neonGreen;
+  let glowColor = `0 0 15px ${palette.neonGreen}66`;
+  let textColor: string = palette.neonGreen;
   
   if (isDanger) {
-    barColor = 'bg-alert-red';
-    glowColor = 'shadow-[0_0_15px_rgba(255,0,85,0.4)]';
-    textColor = 'text-alert-red';
+    barColor = palette.alertRed;
+    glowColor = `0 0 15px ${palette.alertRed}66`;
+    textColor = palette.alertRed;
   } else if (isWarning) {
-    barColor = 'bg-yellow-500';
-    glowColor = 'shadow-[0_0_15px_rgba(234,179,8,0.4)]';
-    textColor = 'text-yellow-500';
+    barColor = palette.warningYellow;
+    glowColor = `0 0 15px ${palette.warningYellow}66`;
+    textColor = palette.warningYellow;
   }
 
-  // Calculate simulated height
   const fillHeight = isDanger ? '90%' : isWarning ? '80%' : '65%';
 
   return (
     <div className="relative flex flex-col justify-between h-full p-4 bg-[#0A0A0A] rounded-[20px] border border-white/5 overflow-hidden group hover:border-white/10 transition-colors">
-      {/* Background Texture */}
       <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:20px_20px] opacity-20 pointer-events-none"></div>
 
       <div className="flex justify-between items-start z-10 relative">
@@ -153,19 +319,16 @@ export const MetricGauge = memo(({ label, value, unit, status, icon: Icon, trend
                <Icon className="w-3 h-3 text-gray-600" aria-hidden="true" />
                {label}
             </span>
-            <div className={`text-2xl font-bold tracking-tighter font-mono ${textColor} drop-shadow-sm`}>{value}</div>
+            <div className="text-2xl font-bold tracking-tighter font-mono drop-shadow-sm" style={{ color: textColor }}>{value}</div>
          </div>
          
-         {/* Vertical HUD Bar */}
          <div className="w-2 h-10 bg-[#151515] rounded-full overflow-hidden border border-white/5 relative">
              <div 
-                className={`absolute bottom-0 left-0 right-0 ${barColor} ${glowColor} transition-all duration-1000 ease-in-out`} 
-                style={{ height: fillHeight }}
+                className="absolute bottom-0 left-0 right-0 transition-all duration-1000 ease-in-out" 
+                style={{ height: fillHeight, backgroundColor: barColor, boxShadow: glowColor }}
              >
-                {/* Glowing Tip */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-white opacity-50 shadow-[0_0_8px_white]"></div>
              </div>
-             {/* Scan lines on bar */}
              <div className="absolute inset-0 bg-[linear-gradient(transparent_2px,#000_1px)] bg-[size:100%_3px] opacity-30"></div>
          </div>
       </div>
@@ -173,7 +336,7 @@ export const MetricGauge = memo(({ label, value, unit, status, icon: Icon, trend
       <div className="z-10 mt-auto pt-2 flex items-center justify-between">
          <span className="text-[10px] font-mono text-gray-600 uppercase font-bold">{unit}</span>
          {trend && (
-           <span className={`text-[9px] font-mono flex items-center gap-0.5 ${trend === 'up' ? 'text-neon-green/80' : trend === 'down' ? 'text-alert-red/80' : 'text-gray-500'}`}>
+           <span className="text-[9px] font-mono flex items-center gap-0.5" style={{ color: trend === 'up' ? palette.neonGreen : trend === 'down' ? palette.alertRed : palette.textMuted }}>
              {trend === 'up' ? '▲' : trend === 'down' ? '▼' : '−'} 
              <span className="opacity-80 tracking-tight">{trend.toUpperCase()}</span>
            </span>
@@ -183,81 +346,6 @@ export const MetricGauge = memo(({ label, value, unit, status, icon: Icon, trend
   );
 });
 MetricGauge.displayName = 'MetricGauge';
-
-// --- BentoCard ---
-
-interface BentoCardProps extends React.HTMLAttributes<HTMLDivElement> {
-  children?: ReactNode;
-  className?: string;
-  title?: string;
-  active?: boolean;
-  accent?: string;
-  bgImage?: string;
-  onClick?: () => void;
-  headerAction?: ReactNode;
-  isLoading?: boolean;
-}
-
-export const BentoCard = memo(({ children, className = "", title, onClick, active, accent = "neon-green", bgImage, headerAction, isLoading, ...props }: BentoCardProps) => {
-  const borderColor = active ? `border-${accent}` : 'border-white/5';
-  const bgGradient = active 
-    ? `bg-gradient-to-br from-${accent}/5 to-transparent`
-    : 'bg-gradient-to-br from-white/5 to-transparent';
-  
-  return (
-    <div 
-      onClick={() => { if (onClick && !isLoading) { Haptic.tap(); onClick(); } }}
-      onKeyDown={(e) => { if (onClick && !isLoading && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
-      role={onClick ? "button" : "region"}
-      tabIndex={onClick ? 0 : undefined}
-      className={`
-        group relative overflow-hidden rounded-[24px] border bg-[#0A0A0A] transition-all duration-300
-        ${borderColor}
-        ${onClick ? 'active:scale-[0.99] cursor-pointer hover:border-white/10 hover:bg-[#111]' : ''}
-        ${className}
-      `}
-      {...props}
-    >
-      {/* Active Background Gradient */}
-      <div className={`absolute inset-0 ${bgGradient} opacity-30 pointer-events-none transition-opacity duration-500`}></div>
-
-      {/* Noise Texture */}
-      <div className="absolute inset-0 opacity-[0.02] pointer-events-none mix-blend-overlay bg-noise z-0"></div>
-
-      {/* Gloss Effect */}
-      <div className="absolute -inset-[100%] top-0 block h-[200%] w-[50%] -rotate-12 bg-gradient-to-r from-transparent to-white/5 opacity-0 group-hover:animate-shine pointer-events-none z-10" />
-
-      {bgImage && (
-        <div className="absolute inset-0 z-0 pointer-events-none">
-           <img src={bgImage} className="w-full h-full object-cover opacity-20 grayscale group-hover:grayscale-0 group-hover:scale-105 group-hover:opacity-30 transition-all duration-700" alt="" aria-hidden="true" />
-           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/90 to-[#0A0A0A]/40" />
-        </div>
-      )}
-      
-      {(title || headerAction) && (
-        <div className="relative z-20 flex justify-between items-center mb-3 px-1 pt-1">
-          {title && (
-            <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-gray-500 flex items-center gap-2">
-              {title}
-            </div>
-          )}
-          {headerAction}
-        </div>
-      )}
-      
-      <div className="relative z-10 h-full w-full">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full min-h-[100px]">
-             <Loader2 className="w-6 h-6 text-gray-700 animate-spin" />
-          </div>
-        ) : (
-          children
-        )}
-      </div>
-    </div>
-  );
-});
-BentoCard.displayName = 'BentoCard';
 
 // --- Stage Progress Bar ---
 
@@ -276,7 +364,6 @@ export const StageProgressBar = ({ current, total, label }: { current: number, t
           style={{ width: `${percentage}%` }}
         >
           <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_2px,rgba(255,255,255,0.3)_2px)] bg-[size:4px_100%] opacity-30"></div>
-          {/* Pulse effect for active growth */}
           <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
         </div>
       </div>
@@ -308,8 +395,8 @@ export const TrendSparkline = memo(({ data }: { data?: number[] }) => {
       <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible" preserveAspectRatio="none">
         <defs>
           <linearGradient id="sparklineGradient" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="rgba(0,255,163,0.2)" />
-            <stop offset="100%" stopColor="rgba(0,255,163,1)" />
+            <stop offset="0%" stopColor={`${palette.neonGreen}33`} />
+            <stop offset="100%" stopColor={palette.neonGreen} />
           </linearGradient>
         </defs>
         <polyline
@@ -320,7 +407,7 @@ export const TrendSparkline = memo(({ data }: { data?: number[] }) => {
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
-          filter="drop-shadow(0 0 4px rgba(0,255,163,0.3))"
+          filter={`drop-shadow(0 0 4px ${palette.neonGreen}4D)`}
         />
       </svg>
     </div>

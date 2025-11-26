@@ -1,4 +1,3 @@
-
 import { useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useServices } from '../contexts/ServiceContext';
 import { ImageUtils } from '../services/imageUtils';
@@ -432,7 +431,7 @@ export const useAppController = () => {
       dispatch({ type: 'SET_SHOW_VOICE', payload: false });
       switch(cmd.intent) {
           case 'NAVIGATE':
-              if (cmd.targetView) dispatch({ type: 'SET_VIEW', payload: cmd.targetView as any });
+              if (cmd.targetView) dispatch({ type: 'SET_VIEW', payload: cmd.targetView as AppState['view'] });
               break;
           case 'LOG':
               if (cmd.logProposal) await handleLogProposal(cmd.logProposal);

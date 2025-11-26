@@ -7,12 +7,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>Cultivator's Copilot</title>
-    <script>
-      // Safe Polyfill for process to prevent crashes in libraries using process.env
-      window.process = window.process || {};
-      window.process.env = window.process.env || {};
-      window.process.env.NODE_ENV = window.process.env.NODE_ENV || 'production';
-    </script>
+    
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -189,7 +187,13 @@
     "react-markdown": "https://esm.sh/react-markdown@9?bundle",
     "vitest": "https://aistudiocdn.com/vitest@^4.0.14",
     "@testing-library/react": "https://aistudiocdn.com/@testing-library/react@^16.3.0",
-    "@testing-library/jest-dom": "https://aistudiocdn.com/@testing-library/jest-dom@^6.9.1"
+    "@testing-library/jest-dom": "https://aistudiocdn.com/@testing-library/jest-dom@^6.9.1",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "typescript-eslint": "https://aistudiocdn.com/typescript-eslint@^8.48.0",
+    "globals": "https://aistudiocdn.com/globals@^16.5.0",
+    "@eslint/js": "https://aistudiocdn.com/@eslint/js@^9.39.1",
+    "eslint-plugin-react-hooks": "https://aistudiocdn.com/eslint-plugin-react-hooks@^7.0.1",
+    "eslint-plugin-react-refresh": "https://aistudiocdn.com/eslint-plugin-react-refresh@^0.4.24"
   }
 }
 </script>

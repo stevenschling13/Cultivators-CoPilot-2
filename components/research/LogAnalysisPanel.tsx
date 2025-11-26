@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { Beaker, Microscope, X, ShieldAlert, AlertTriangle, FileText, Bug, Sprout, CheckCircle2 } from 'lucide-react';
 import { GrowLog } from '../../types';
 import { Haptic } from '../../utils/haptics';
-import { BentoCard } from '../ui/Primitives';
+import { Card } from '../ui/Card';
 
 interface LogAnalysisPanelProps {
   log: GrowLog;
@@ -79,7 +78,7 @@ export const LogAnalysisPanel = ({ log, onClose }: LogAnalysisPanelProps) => {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-             <BentoCard className="p-4 !rounded-2xl !bg-[#111]">
+             <Card noPadding className="p-4 !rounded-2xl !bg-[#111]">
                 <div className="flex items-center gap-2 mb-3">
                    <ShieldAlert className="w-4 h-4 text-alert-red" />
                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Vectors</span>
@@ -89,9 +88,9 @@ export const LogAnalysisPanel = ({ log, onClose }: LogAnalysisPanelProps) => {
                       {diagnosis.detectedPests.map((p,i) => <span key={i} className="text-xs font-bold text-alert-red bg-alert-red/10 px-2 py-1 rounded">{p}</span>)}
                    </div>
                 ) : <div className="text-xs text-gray-600 font-mono">None Detected</div>}
-             </BentoCard>
+             </Card>
 
-             <BentoCard className="p-4 !rounded-2xl !bg-[#111]">
+             <Card noPadding className="p-4 !rounded-2xl !bg-[#111]">
                 <div className="flex items-center gap-2 mb-3">
                    <AlertTriangle className="w-4 h-4 text-yellow-500" />
                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nutrients</span>
@@ -101,7 +100,7 @@ export const LogAnalysisPanel = ({ log, onClose }: LogAnalysisPanelProps) => {
                       {diagnosis.nutrientDeficiencies.map((d,i) => <span key={i} className="text-xs font-bold text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">{d}</span>)}
                    </div>
                 ) : <div className="text-xs text-gray-600 font-mono">Balanced Profile</div>}
-             </BentoCard>
+             </Card>
           </div>
           
           {diagnosis.recommendations?.length > 0 && (

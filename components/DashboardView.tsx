@@ -1,8 +1,9 @@
 import React, { memo } from 'react';
-import { Plus, Mic, Volume2, Database, Upload } from 'lucide-react';
+import { Plus, Volume2, Database, Upload } from 'lucide-react';
 import { FacilityBriefing, Room, PlantBatch } from '../types';
 import { RoomTile } from './ui/RoomTile';
-import { BentoCard, SkeletonCard, StageProgressBar, StatusBadge } from './ui/Primitives';
+import { SkeletonCard, StageProgressBar, StatusBadge } from './ui/Primitives';
+import { Card } from './ui/Card';
 import { Haptic } from '../utils/haptics';
 
 interface DashboardViewProps {
@@ -21,7 +22,7 @@ interface DashboardViewProps {
 
 export const DashboardView = memo(({ 
   briefing, rooms, batches, 
-  onBackup, onImport, onCamera, onSelectBatch, onAddBatch, onAddRoom, onEditRoom, onVoiceCommand 
+  onBackup, onImport, onCamera, onSelectBatch, onAddBatch, onAddRoom, onEditRoom 
 }: DashboardViewProps) => {
 
   const activeBatches = batches.filter(b => b.isActive !== false);
@@ -36,36 +37,13 @@ export const DashboardView = memo(({
   };
 
   return (
-    <div className="p-4 sm:p-6 pt-safe-top animate-fade-in pb-32 space-y-8 max-w-7xl mx-auto">
-        
-        {/* Top Header */}
-        <div className="flex justify-between items-end">
-            <div>
-                <h1 className="text-3xl sm:text-4xl font-black tracking-tighter text-white mb-1 drop-shadow-xl font-sans">COMMAND CENTER</h1>
-                <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-neon-green rounded-full animate-pulse shadow-[0_0_8px_#00ffa3]"></span>
-                    Gemini 3 Pro Active
-                </div>
-            </div>
-            
-            <button 
-                onClick={() => { Haptic.tap(); onVoiceCommand(); }}
-                className="relative group p-4 bg-[#111] rounded-full border border-white/10 hover:border-neon-green/50 transition-all active:scale-95 shadow-lg"
-            >
-                <Mic className="w-6 h-6 text-white group-hover:text-neon-green transition-colors" />
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon-green opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-neon-green shadow-[0_0_5px_#00ffa3]"></span>
-                </span>
-            </button>
-        </div>
-
+    <div className="p-4 sm:p-0 animate-fade-in pb-32 space-y-8">
         {/* Facility Briefing Card */}
         {briefing ? (
-            <BentoCard 
+            <Card 
                 className={`!bg-[#0A0A0A] !border-l-4 ${getBriefingBorderColor(briefing.status)} shadow-2xl`} 
                 title="FACILITY BRIEFING"
-                headerAction={
+                action={
                     <div className="flex items-center gap-2">
                          <StatusBadge status={briefing.status} pulse={briefing.status === 'CRITICAL'} size="sm" />
                         <button 
@@ -77,7 +55,7 @@ export const DashboardView = memo(({
                     </div>
                 }
             >
-                <div className="px-5 pb-5 pt-2">
+                <div>
                     <p className="text-sm text-gray-300 leading-relaxed font-medium max-w-3xl mb-6">{briefing.summary}</p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -100,7 +78,7 @@ export const DashboardView = memo(({
                         )}
                     </div>
                 </div>
-            </BentoCard>
+            </Card>
         ) : (
             <SkeletonCard />
         )}
@@ -142,10 +120,10 @@ export const DashboardView = memo(({
                     const totalDaysEst = batch.currentStage === 'Flowering' ? (batch.breederHarvestDays || 65) : 30; 
                     
                     return (
-                        <BentoCard 
+                        <Card 
                             key={batch.id}
                             title={batch.batchTag}
-                            className="p-5 !bg-[#111] min-h-[160px]"
+                            className="!bg-[#111] min-h-[160px]"
                             onClick={() => onSelectBatch(batch)}
                             active={true}
                             accent="neon-blue"
@@ -163,7 +141,7 @@ export const DashboardView = memo(({
                                    />
                                 </div>
                             </div>
-                        </BentoCard>
+                        </Card>
                     );
                 })}
 

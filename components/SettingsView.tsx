@@ -1,11 +1,9 @@
-
-
 import React, { memo } from 'react';
-import { ArrowLeft, Bell, BellOff, Wifi, Database, ThermometerSun, Sliders, Trash2, RotateCcw, Save, CloudCog, CheckCircle2 } from 'lucide-react';
+import { Bell, BellOff, Wifi, Database, ThermometerSun, Sliders, Trash2, RotateCcw, Save, CloudCog } from 'lucide-react';
 import { Haptic } from '../utils/haptics';
 import { GrowSetup } from '../types';
 import { hardwareService } from '../services/hardwareService';
-import { BentoCard } from './ui/Primitives';
+import { Card } from './ui/Card';
 
 interface SettingsViewProps {
   setup: GrowSetup;
@@ -45,18 +43,10 @@ export const SettingsView = memo(({ setup, onUpdateSetup, onBack, onRestore, onS
   };
 
   return (
-    <div className="p-6 pt-safe-top animate-slide-up pb-32 space-y-6">
-       <div className="flex items-center gap-4 mb-2">
-          <button onClick={() => { Haptic.tap(); onBack(); }} className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"><ArrowLeft className="w-5 h-5" /></button>
-          <div>
-              <h1 className="text-2xl font-black tracking-tight">SYSTEM CONFIG</h1>
-              <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Global Preferences & Hardware</div>
-          </div>
-       </div>
-       
+    <div className="p-4 sm:p-0 animate-slide-up pb-32 space-y-6">
        <div className="space-y-6">
           {/* Environment Physics */}
-          <BentoCard title="Environment Physics" className="p-5 !bg-[#0A0A0A]">
+          <Card title="Environment Physics" className="!bg-[#0A0A0A]">
              <div className="space-y-6">
                 <div>
                    <div className="flex justify-between items-center mb-4">
@@ -110,10 +100,10 @@ export const SettingsView = memo(({ setup, onUpdateSetup, onBack, onRestore, onS
                    </div>
                 </div>
              </div>
-          </BentoCard>
+          </Card>
           
           {/* Cloud Integrations (NEW) */}
-          <BentoCard title="Cloud Integrations" className="p-5 !bg-[#0A0A0A]">
+          <Card title="Cloud Integrations" className="!bg-[#0A0A0A]">
               <div className="space-y-4">
                   <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -133,10 +123,10 @@ export const SettingsView = memo(({ setup, onUpdateSetup, onBack, onRestore, onS
                       </button>
                   </div>
               </div>
-          </BentoCard>
+          </Card>
 
           {/* Permissions & Hardware */}
-          <BentoCard title="Permissions & Hardware" className="p-5 !bg-[#0A0A0A]">
+          <Card title="Permissions & Hardware" className="!bg-[#0A0A0A]">
               <div className="space-y-3">
                 <div onClick={toggleNotifications} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 active:bg-white/10 transition-colors cursor-pointer group">
                    <div className="flex items-center gap-3">
@@ -166,10 +156,10 @@ export const SettingsView = memo(({ setup, onUpdateSetup, onBack, onRestore, onS
                    <span className="text-[9px] font-bold text-neon-blue uppercase bg-neon-blue/10 px-2 py-1 rounded border border-neon-blue/20">AUTO</span>
                 </div>
               </div>
-          </BentoCard>
+          </Card>
 
           {/* Data Management */}
-          <BentoCard title="Data Management" className="p-5 !bg-[#0A0A0A]">
+          <Card title="Data Management" className="!bg-[#0A0A0A]">
              <div className="grid grid-cols-2 gap-3">
                  <button 
                     onClick={() => { Haptic.tap(); onRestore(); }}
@@ -205,7 +195,7 @@ export const SettingsView = memo(({ setup, onUpdateSetup, onBack, onRestore, onS
                     Factory Reset Device
                  </button>
              </div>
-          </BentoCard>
+          </Card>
        </div>
     </div>
   );

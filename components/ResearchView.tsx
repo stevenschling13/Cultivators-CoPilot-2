@@ -1,10 +1,10 @@
-
 import React, { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { FlaskConical, BrainCircuit, ChevronRight, Microscope, Sparkles, Zap, Search, Send, Terminal } from 'lucide-react';
+import { BrainCircuit, ChevronRight, Microscope, Sparkles, Zap, Send, Terminal } from 'lucide-react';
 import { GrowLog, PlantBatch, CohortAnalysis } from '../types';
 import { geminiService } from '../services/geminiService';
-import { BentoCard, SkeletonCard } from './ui/Primitives';
+import { SkeletonCard } from './ui/Primitives';
+import { Card } from './ui/Card';
 import { LogAnalysisPanel } from './research/LogAnalysisPanel';
 import { CustomTooltip } from './research/ResearchUtils';
 import { Haptic } from '../utils/haptics';
@@ -80,20 +80,8 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
   };
 
   return (
-    <div className="p-6 pt-safe-top pb-32 animate-fade-in space-y-6">
+    <div className="p-4 sm:p-0 animate-fade-in pb-32 space-y-6">
       <div className="flex flex-col gap-4">
-         <div className="flex justify-between items-center">
-             <div>
-                <h1 className="text-2xl font-black tracking-tight text-white mb-1 flex items-center gap-3">
-                   <FlaskConical className="w-6 h-6 text-neon-blue" />
-                   RESEARCH LAB
-                </h1>
-                <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">
-                   Genetic Performance & Pathology
-                </div>
-             </div>
-         </div>
-
          {/* Batch Filter Scroller */}
          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
             <button
@@ -117,7 +105,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
 
       {/* Main Health Trend Chart */}
       {diagnosticLogs.length > 1 ? (
-          <BentoCard title="Bio-Health Trends" className="h-64 p-4 !bg-[#0A0A0A]">
+          <Card title="Bio-Health Trends" className="h-64 !bg-[#0A0A0A]">
              <div className="w-full h-full -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
                    <AreaChart data={diagnosticLogs}>
@@ -155,7 +143,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
                    </AreaChart>
                 </ResponsiveContainer>
              </div>
-          </BentoCard>
+          </Card>
       ) : (
           <div className="h-64 rounded-[24px] border border-dashed border-white/10 bg-[#0A0A0A] flex items-center justify-center text-gray-500 text-xs font-mono">
              INSUFFICIENT DATA POINTS FOR CHARTING
@@ -208,7 +196,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
          <div>
              {analysis ? (
                  <div className="space-y-4 animate-slide-up">
-                     <BentoCard title="Cohort Analysis" className="p-5 !bg-[#0A0A0A] border-neon-green/30">
+                     <Card title="Cohort Analysis" className="!bg-[#0A0A0A] border-neon-green/30">
                         <div className="space-y-4">
                             <div>
                                 <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Dominant Trend</div>
@@ -229,7 +217,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
                                  </p>
                             </div>
                         </div>
-                     </BentoCard>
+                     </Card>
                      <button 
                          onClick={() => setAnalysis(null)}
                          className="w-full py-3 bg-white/5 text-gray-500 rounded-xl text-xs font-bold hover:text-white transition-colors"
@@ -262,7 +250,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
          </div>
 
          {/* Recent Specimens List */}
-         <BentoCard title="Recent Specimens" className="p-4 !bg-[#0A0A0A]">
+         <Card title="Recent Specimens" className="!bg-[#0A0A0A]">
             <div className="space-y-2">
                 {diagnosticLogs.length === 0 && (
                     <div className="text-xs text-gray-600 font-mono italic text-center py-8 border border-dashed border-white/10 rounded-xl">
@@ -297,7 +285,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
                     </div>
                 ))}
             </div>
-         </BentoCard>
+         </Card>
       </div>
 
       {/* Analysis Modal Overlay */}

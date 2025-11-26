@@ -1,6 +1,5 @@
-
 import React, { memo, useState } from 'react';
-import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity, Archive, Edit2, CalendarClock, Sparkles, Loader2 } from 'lucide-react';
+import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity, Archive, Edit2, CalendarClock, Sparkles } from 'lucide-react';
 import { PlantBatch, GrowLog, ScheduleItem } from '../../types';
 import { FLIP_DATE, STAGE_INFO } from '../../constants';
 import { SwipeableLogItem } from '../SwipeableLogItem';
@@ -9,7 +8,8 @@ import { BatchEditModal } from './BatchEditModal';
 import { Haptic } from '../../utils/haptics';
 import { useAppController } from '../../hooks/useAppController';
 import { geminiService } from '../../services/geminiService';
-import { BentoCard } from '../ui/Primitives';
+import { NeonButton } from '../ui/Primitives';
+import { Card } from '../ui/Card';
 
 interface BatchDetailModalProps {
   batch: PlantBatch;
@@ -97,18 +97,20 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
                    </p>
                 </div>
                 <div className="flex gap-3">
-                   <button 
+                   <NeonButton 
+                     variant="secondary"
                      onClick={() => setShowArchiveConfirm(false)}
-                     className="flex-1 py-3 bg-white/5 rounded-xl text-white font-medium"
+                     className="flex-1"
                    >
                      Cancel
-                   </button>
-                   <button 
+                   </NeonButton>
+                   <NeonButton 
+                     variant="danger"
                      onClick={handleArchive}
-                     className="flex-1 py-3 bg-alert-red text-white rounded-xl font-bold shadow-[0_0_15px_rgba(255,0,85,0.4)]"
+                     className="flex-1"
                    >
                      Confirm Harvest
-                   </button>
+                   </NeonButton>
                 </div>
              </div>
           </div>
@@ -181,7 +183,7 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
 
         {/* Predictive Schedule (Agentic) */}
         {schedule.length > 0 ? (
-            <BentoCard className="p-5 !bg-[#111]" title="Forward Command">
+            <Card className="!bg-[#111]" title="Forward Command">
                 <div className="space-y-4">
                     {schedule.map((item, i) => (
                         <div key={i} className="flex gap-3 items-start border-b border-white/5 last:border-0 pb-3 last:pb-0">
@@ -198,23 +200,20 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
                         </div>
                     ))}
                 </div>
-            </BentoCard>
+            </Card>
         ) : (
-            <button 
+            <NeonButton 
+                variant="secondary"
                 onClick={loadPredictiveSchedule}
-                disabled={isLoadingSchedule}
-                className="w-full py-4 bg-white/5 border border-white/10 rounded-[24px] flex items-center justify-center gap-2 hover:bg-white/10 transition-all disabled:opacity-50"
+                isLoading={isLoadingSchedule}
+                icon={CalendarClock}
+                className="w-full !rounded-[24px] !py-4"
             >
-                {isLoadingSchedule ? (
-                    <Sparkles className="w-4 h-4 animate-spin text-neon-blue" />
-                ) : (
-                    <CalendarClock className="w-4 h-4 text-neon-blue" />
-                )}
-                <span className="text-xs font-bold uppercase tracking-widest text-white">Generate Forward Schedule</span>
-            </button>
+                Generate Forward Schedule
+            </NeonButton>
         )}
 
-        {/* Target Matrix (Legacy/Static - Could be hidden if AI schedule is active, but kept for reference) */}
+        {/* Target Matrix (Legacy/Static) */}
         <div className="bg-[#0A0A0A] rounded-[24px] p-5 border border-white/5">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Phase Targets</h3>
@@ -242,13 +241,14 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
         </div>
 
         {/* Action: Archive */}
-        <button 
-           onClick={() => { Haptic.tap(); setShowArchiveConfirm(true); }}
-           className="w-full py-4 border border-dashed border-white/10 rounded-[24px] flex items-center justify-center gap-2 text-gray-500 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all"
+        <NeonButton 
+            variant="ghost"
+            onClick={() => { Haptic.tap(); setShowArchiveConfirm(true); }}
+            icon={Archive}
+            className="w-full !border-dashed !border-white/10 !text-gray-500 hover:!text-white hover:!border-white/30"
         >
-            <Archive className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-widest">Complete & Archive Run</span>
-        </button>
+            Complete & Archive Run
+        </NeonButton>
 
         {/* Data Timeline */}
         <div>
@@ -285,20 +285,14 @@ export const BatchDetailModal = memo(({ batch, onClose, logs, onDeleteLog, onUpd
                 {/* Load More Button */}
                 {hasMore && (
                     <div className="pt-8 pb-4 pl-6">
-                        <button 
+                        <NeonButton 
+                            variant="secondary"
                             onClick={() => { Haptic.tap(); onLoadMore(); }}
-                            disabled={isLoading}
-                            className="w-full py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            isLoading={isLoading}
+                            className="w-full"
                         >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Retrieving...
-                                </>
-                            ) : (
-                                "Load More History"
-                            )}
-                        </button>
+                            Load More History
+                        </NeonButton>
                     </div>
                 )}
             </div>

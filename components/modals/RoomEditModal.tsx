@@ -1,14 +1,13 @@
 
-
-
 import React, { useState, useEffect } from 'react';
-import { X, Save, Box, Activity, Thermometer, Wifi, Trash2, Sparkles } from 'lucide-react';
+import { X, Box, Activity, Wifi, Trash2, Sparkles, Clock, Calendar } from 'lucide-react';
 import { Room, GrowStage, SensorDevice, PlantBatch, EnvironmentalTargets } from '../../types';
 import { STAGE_INFO } from '../../constants';
 import { hardwareService } from '../../services/hardwareService';
 import { geminiService } from '../../services/geminiService';
 import { Haptic } from '../../utils/haptics';
 import { generateUUID } from '../../utils/uuid';
+import { NeonButton, NeonInput, NeonSelect } from '../ui/Primitives';
 
 interface RoomEditModalProps {
   room?: Room | null;
@@ -107,41 +106,30 @@ export const RoomEditModal = ({ room, batches, onSave, onDelete, onClose }: Room
 
         <div className="p-6 space-y-6">
           {/* Room Identity */}
-          <div>
-            <label className="text-xs text-gray-500 uppercase font-mono tracking-wider mb-2 block">Room Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. 4x4 Flower Tent"
-              className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white focus:border-neon-blue focus:outline-none focus:ring-1 focus:ring-neon-blue/50"
-              autoFocus
-            />
-          </div>
+          <NeonInput 
+             label="Room Name"
+             value={name}
+             onChange={(e) => setName(e.target.value)}
+             placeholder="e.g. 4x4 Flower Tent"
+             autoFocus
+          />
 
           {/* Stage Configuration */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-               <label className="text-xs text-gray-500 uppercase font-mono tracking-wider mb-2 block">Grow Stage</label>
-               <select 
-                  value={stage}
-                  onChange={(e) => setStage(e.target.value as GrowStage)}
-                  className="w-full bg-black border border-white/10 rounded-xl px-3 py-3 text-white text-sm focus:border-neon-blue focus:outline-none"
-               >
-                  {Object.values(GrowStage).map(s => (
-                      <option key={s} value={s}>{s}</option>
-                  ))}
-               </select>
-            </div>
-            <div>
-               <label className="text-xs text-gray-500 uppercase font-mono tracking-wider mb-2 block">Current Day</label>
-               <input
-                  type="number"
-                  value={stageDay}
-                  onChange={(e) => setStageDay(parseInt(e.target.value) || 1)}
-                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-neon-blue focus:outline-none"
-               />
-            </div>
+            <NeonSelect 
+                label="Grow Stage"
+                options={Object.values(GrowStage).map(s => ({ value: s, label: s }))}
+                value={stage}
+                onChange={(e) => setStage(e.target.value as GrowStage)}
+                icon={Calendar}
+            />
+            <NeonInput
+                label="Current Day"
+                type="number"
+                value={stageDay}
+                onChange={(e) => setStageDay(parseInt(e.target.value) || 1)}
+                icon={Clock}
+            />
           </div>
 
           {/* Target Preview */}
@@ -188,7 +176,7 @@ export const RoomEditModal = ({ room, batches, onSave, onDelete, onClose }: Room
             <label className="text-xs text-gray-500 uppercase font-mono tracking-wider mb-2 flex items-center gap-2">
                 <Wifi className="w-3 h-3" /> Hardware Binding
             </label>
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                 {availableDevices.map(device => (
                     <div 
                         key={device.id}
@@ -215,19 +203,21 @@ export const RoomEditModal = ({ room, batches, onSave, onDelete, onClose }: Room
 
           <div className="pt-4 flex gap-3">
             {room && (
-                <button 
+                <NeonButton 
+                    variant="danger" 
                     onClick={handleDelete}
-                    className="p-4 rounded-xl bg-alert-red/10 text-alert-red hover:bg-alert-red/20 transition-colors"
+                    className="!px-4"
                 >
                     <Trash2 className="w-5 h-5" />
-                </button>
+                </NeonButton>
             )}
-            <button 
-              onClick={handleSave}
-              className="flex-1 py-4 bg-neon-blue text-black font-bold rounded-xl shadow-[0_0_20px_rgba(0,212,255,0.3)] active:scale-95 transition-transform"
+            <NeonButton 
+                variant="primary" 
+                onClick={handleSave} 
+                className="flex-1"
             >
-              {room ? 'Save Configuration' : 'Create Room'}
-            </button>
+                {room ? 'Save Configuration' : 'Create Room'}
+            </NeonButton>
           </div>
         </div>
       </div>

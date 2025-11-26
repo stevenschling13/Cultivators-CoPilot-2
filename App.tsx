@@ -1,9 +1,9 @@
-import React, { Suspense, lazy, useState } from 'react';
-import { Settings, MessageCircle, LayoutDashboard, ScanEye, FlaskConical } from 'lucide-react';
+
+import React, { Suspense, lazy, useState, useMemo } from 'react';
+import { Mic, ArrowLeft, FlaskConical, LayoutDashboard, Settings } from 'lucide-react';
 import { dbService } from './services/db';
 import { BackupService } from './services/backupService';
 import { useAppController } from './hooks/useAppController';
-import { Haptic } from './utils/haptics';
 import { VpdZone } from './types';
 
 import { ToastContainer } from './components/ui/Toast';
@@ -16,6 +16,11 @@ import { BatchWizardModal } from './components/modals/BatchWizardModal';
 import { RoomEditModal } from './components/modals/RoomEditModal';
 import { VoiceCommandModal } from './components/modals/VoiceCommandModal';
 import { SystemErrorBoundary } from './components/SystemErrorBoundary';
+
+// Layout Components
+import { AppLayout } from './components/layout/AppLayout';
+import { BottomNav } from './components/layout/BottomNav';
+import { Header } from './components/layout/Header';
 
 // Lazy Load All Views for Consistent Bundle Splitting
 const DashboardView = lazy(() => import('./components/DashboardView').then(m => ({ default: m.DashboardView })));
@@ -41,8 +46,66 @@ export const App = () => {
 
   const [showBatchWizard, setShowBatchWizard] = useState(false);
 
+  // Centralized Header Logic
+  const renderHeader = () => {
+    switch (view) {
+      case 'dashboard':
+        return (
+          <Header 
+            title="COMMAND CENTER"
+            subtitle={
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-neon-green rounded-full animate-pulse shadow-[0_0_8px_#00ffa3]"></span>
+                Gemini 3 Pro Active
+              </div>
+            }
+            rightAction={
+              <button 
+                onClick={() => actions.setShowVoiceModal(true)}
+                className="relative group p-3 bg-[#111] rounded-full border border-white/10 hover:border-neon-green/50 transition-all active:scale-95 shadow-lg"
+              >
+                <Mic className="w-5 h-5 text-white group-hover:text-neon-green transition-colors" />
+              </button>
+            }
+          />
+        );
+      case 'settings':
+        return (
+          <Header 
+            title="SYSTEM CONFIG"
+            subtitle="Global Preferences & Hardware"
+            leftAction={
+              <button onClick={() => actions.setView('dashboard')} className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors">
+                <ArrowLeft className="w-5 h-5 text-white" />
+              </button>
+            }
+          />
+        );
+      case 'research':
+        return (
+          <Header 
+            title="RESEARCH LAB"
+            subtitle="Genetic Performance & Pathology"
+            leftAction={
+               <div className="p-2 bg-neon-blue/10 rounded-lg">
+                  <FlaskConical className="w-5 h-5 text-neon-blue" />
+               </div>
+            }
+          />
+        );
+      case 'camera': // Fullscreen views handle their own UI
+      case 'chat':
+        return null;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-black text-white pb-20 font-sans selection:bg-neon-green/30">
+    <AppLayout 
+      header={renderHeader()}
+      bottomNav={view !== 'camera' ? <BottomNav currentView={view} onNavigate={actions.setView} /> : null}
+    >
       <ToastContainer toasts={toasts} removeToast={(id) => actions.addToast("Dismissed", "info")} />
       <ProcessingOverlay isProcessing={isProcessing} />
 
@@ -194,44 +257,6 @@ export const App = () => {
           )}
         </Suspense>
       </SystemErrorBoundary>
-
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 h-24 bg-[#050505]/90 backdrop-blur-2xl border-t border-white/5 flex justify-around items-start pt-4 px-2 pb-safe-bottom z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-        {/* Navigation Reflection Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-20 pointer-events-none"></div>
-        
-        {[
-          { id: 'dashboard', icon: LayoutDashboard, label: 'Dash' },
-          { id: 'research', icon: FlaskConical, label: 'Lab' },
-          { id: 'camera', icon: ScanEye, label: 'Scan', main: true },
-          { id: 'chat', icon: MessageCircle, label: 'Ask' },
-          { id: 'settings', icon: Settings, label: 'Sys' }
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => { Haptic.tap(); actions.setView(item.id as any); }}
-            className={`
-              relative flex flex-col items-center justify-center w-16 h-16 rounded-2xl transition-all duration-300 group z-10
-              ${view === item.id ? 'text-neon-green' : 'text-gray-500 hover:text-gray-300'}
-              ${item.main ? '-mt-8' : ''}
-            `}
-          >
-            {item.main ? (
-               <div className={`w-16 h-16 rounded-full flex items-center justify-center bg-[#111] border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.8)] transition-all duration-300 ${view === item.id ? 'border-neon-green shadow-[0_0_20px_rgba(0,255,163,0.3)] scale-110' : 'group-hover:border-white/30'}`}>
-                   <item.icon className={`w-7 h-7 ${view === item.id ? 'text-neon-green' : 'text-white'}`} />
-               </div>
-            ) : (
-               <>
-                   <item.icon className={`w-6 h-6 transition-transform duration-300 ${view === item.id ? 'scale-110 drop-shadow-[0_0_8px_rgba(0,255,163,0.6)]' : ''}`} />
-                   <span className={`text-[9px] font-mono mt-1 uppercase tracking-wider transition-opacity duration-300 ${view === item.id ? 'opacity-100 font-bold' : 'opacity-60'}`}>{item.label}</span>
-                   {view === item.id && (
-                      <div className="absolute -bottom-2 w-1 h-1 bg-neon-green rounded-full shadow-[0_0_5px_#00ffa3]" />
-                   )}
-               </>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
+    </AppLayout>
   );
 };
