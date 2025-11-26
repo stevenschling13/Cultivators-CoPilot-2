@@ -18,6 +18,3 @@
 ## 🧠 CURRENT ARCHITECTURAL GOALS
 -   **Nov 2025:** Maximize Gemini 3 Pro "Thinking" capabilities for Phytopathology.
 -   **Nov 2025:** Transition large files into atomic sub-components.
-
-## 📌 NOTES
-- 2026-XX: Added `@types/node` to the toolchain to satisfy TS lib references; when using Web Crypto PBKDF2, pass `salt.buffer as ArrayBuffer` to `deriveKey` to keep builds passing.

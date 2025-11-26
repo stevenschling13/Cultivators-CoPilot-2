@@ -1,6 +1,6 @@
 
-import React, { Suspense, lazy, useState } from 'react';
-import { Mic, ArrowLeft, FlaskConical } from 'lucide-react';
+import React, { Suspense, lazy, useState, useMemo } from 'react';
+import { Mic, ArrowLeft, FlaskConical, LayoutDashboard, Settings } from 'lucide-react';
 import { dbService } from './services/db';
 import { BackupService } from './services/backupService';
 import { useAppController } from './hooks/useAppController';
@@ -106,7 +106,7 @@ export const App = () => {
       header={renderHeader()}
       bottomNav={view !== 'camera' ? <BottomNav currentView={view} onNavigate={actions.setView} /> : null}
     >
-      <ToastContainer toasts={toasts} removeToast={actions.removeToast} />
+      <ToastContainer toasts={toasts} removeToast={(id) => actions.addToast("Dismissed", "info")} />
       <ProcessingOverlay isProcessing={isProcessing} />
 
       {/* Modals */}
@@ -194,6 +194,7 @@ export const App = () => {
               batches={batches}
               onBackup={() => actions.setShowBackupModal('backup')}
               onImport={() => actions.setShowImportModal(true)}
+              onCamera={() => actions.setView('camera')}
               onSelectBatch={(b) => actions.setSelectedBatch(b)}
               onAddBatch={() => setShowBatchWizard(true)}
               onAddRoom={() => actions.setShowRoomModal(true)}
@@ -203,13 +204,14 @@ export const App = () => {
           )}
 
           {view === 'settings' && (
-            <SettingsView
+            <SettingsView 
               setup={setup}
               onUpdateSetup={actions.setSetup}
+              onBack={() => actions.setView('dashboard')}
               onRestore={() => actions.setShowBackupModal('restore')}
-              onSaveConfig={() => {
-                  dbService.saveSettings(setup);
-                  actions.addToast("Settings Saved", "success");
+              onSaveConfig={() => { 
+                  dbService.saveSettings(setup); 
+                  actions.addToast("Settings Saved", "success"); 
               }}
             />
           )}

@@ -141,10 +141,6 @@ export const useAppController = () => {
     }, 4000);
   }, []);
 
-  const removeToast = useCallback((id: string) => {
-    dispatch({ type: 'REMOVE_TOAST', payload: id });
-  }, []);
-
   const DEFAULT_BRIEFING: FacilityBriefing = {
       status: 'OPTIMAL',
       summary: 'System initialized. Monitoring active.',
@@ -459,7 +455,6 @@ export const useAppController = () => {
     actions: {
       setView: (v: AppState['view']) => dispatch({ type: 'SET_VIEW', payload: v }),
       addToast,
-      removeToast,
       setSetup: (s: GrowSetup) => dispatch({ type: 'SET_SETUP', payload: s }),
       setSelectedBatch: (b: PlantBatch | null) => dispatch({ type: 'SET_SELECTED_BATCH', payload: b }),
       setAnalysisResult: (r: any) => dispatch({ type: 'SET_ANALYSIS_RESULT', payload: r }),

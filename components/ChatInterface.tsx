@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Send, X, Zap, Terminal, Plus } from 'lucide-react';
+import { Send, Image as ImageIcon, Sparkles, X, Zap, Terminal, Plus } from 'lucide-react';
 import { ChatMessage, ChatAttachment, GrowLog, GrowSetup, PlantBatch, EnvironmentReading, CalculatedMetrics, LogProposal } from '../types';
 import { geminiService } from '../services/geminiService';
 import { dbService } from '../services/db';
