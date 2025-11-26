@@ -1,5 +1,5 @@
 import React, { memo, useState } from 'react';
-import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity, Archive, Edit2, CalendarClock, Sparkles } from 'lucide-react';
+import { X, Thermometer, Droplet, Wind, Sun, Info, Calendar, Activity, Archive, Edit2, CalendarClock } from 'lucide-react';
 import { PlantBatch, GrowLog, ScheduleItem } from '../../types';
 import { FLIP_DATE, STAGE_INFO } from '../../constants';
 import { SwipeableLogItem } from '../SwipeableLogItem';

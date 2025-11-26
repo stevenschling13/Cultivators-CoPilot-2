@@ -9,22 +9,33 @@ export class GeminiVision {
   constructor(private network: GeminiNetwork) {}
 
   public async startLiveAnalysis(
-    videoStream: MediaStream | null, 
+    videoStream: MediaStream | null,
     onOverlayUpdate: (data: ArOverlayData) => void,
     onError: (err: Error) => void,
     onClose: () => void,
     onTranscript: (text: string) => void
   ): Promise<void> {
     // In a real implementation, this would connect to a WebSocket proxy.
+    if (videoStream) {
+      console.warn('Live analysis requested but proxy is unavailable. Stream will not be processed.');
+    }
+    // Touch callbacks to satisfy interface expectations
+    onOverlayUpdate({
+      status: 'offline',
+      guidance: 'Live API requires Backend WebSocket Proxy. Running in Text/Image Mode.',
+      criticalWarning: 'AR overlay unavailable in this environment'
+    });
+    onTranscript('Live API requires Backend WebSocket Proxy. Running in Text/Image Mode.');
+    onClose();
     onError(new Error("Live API requires Backend WebSocket Proxy. Running in Text/Image Mode."));
   }
 
   public sendLiveFrame(base64Image: string): void {
-     // No-op
+     console.warn('Live frame streaming not available without proxy.', { length: base64Image?.length });
   }
 
   public sendLiveTextQuery(text: string): void {
-     // No-op
+     console.warn('Live text streaming not available without proxy.', { preview: text.slice(0, 20) });
   }
 
   public stopLiveAnalysis(): void {
