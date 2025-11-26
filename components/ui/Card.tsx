@@ -54,7 +54,7 @@ export const Card = memo(forwardRef<HTMLDivElement, CardProps>(({
     ? `bg-gradient-to-br ${styles.glow} to-transparent`
     : 'bg-gradient-to-br from-white/5 to-transparent';
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = () => {
     if (onClick && !isLoading && !disabled) {
       Haptic.tap();
       onClick();

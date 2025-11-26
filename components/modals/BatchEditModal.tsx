@@ -1,7 +1,7 @@
 
 
 import React, { useState } from 'react';
-import { X, Save, Sprout, Calendar, Dna } from 'lucide-react';
+import { X, Save, Calendar, Dna } from 'lucide-react';
 import { PlantBatch } from '../../types';
 import { Haptic } from '../../utils/haptics';
 
