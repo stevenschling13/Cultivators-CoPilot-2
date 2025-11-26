@@ -28,7 +28,7 @@ export class CryptoService {
     return window.crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt: salt,
+        salt: salt.buffer as ArrayBuffer,
         iterations: this.KDF_ITERATIONS,
         hash: 'SHA-256'
       },
@@ -44,8 +44,10 @@ export class CryptoService {
    * Format: [Salt (16b)][IV (12b)][Ciphertext]
    */
   public static async encryptData(data: unknown, password: string): Promise<Blob> {
-    const salt = window.crypto.getRandomValues(new Uint8Array(this.SALT_LENGTH));
-    const iv = window.crypto.getRandomValues(new Uint8Array(this.IV_LENGTH));
+      const salt: Uint8Array<ArrayBuffer> = new Uint8Array(this.SALT_LENGTH);
+      window.crypto.getRandomValues(salt);
+      const iv: Uint8Array<ArrayBuffer> = new Uint8Array(this.IV_LENGTH);
+      window.crypto.getRandomValues(iv);
     const key = await this.deriveKey(password, salt);
 
     const enc = new TextEncoder();
@@ -88,7 +90,7 @@ export class CryptoService {
 
       const dec = new TextDecoder();
       return JSON.parse(dec.decode(decryptedBuffer));
-    } catch (e) {
+    } catch {
       throw new Error("Invalid Password or Corrupt File");
     }
   }

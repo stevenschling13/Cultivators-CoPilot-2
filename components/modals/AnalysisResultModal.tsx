@@ -24,9 +24,10 @@ export const AnalysisResultModal = memo(({ result, log, onSave, onDiscard, onSim
           const url = await onSimulate(log.imageUrl);
           setVideoUrl(url);
           Haptic.success();
-      } catch (e) {
+      } catch (error) {
           // Error handled by controller toast
           Haptic.error();
+          console.error(error);
       } finally {
           setIsSimulating(false);
       }

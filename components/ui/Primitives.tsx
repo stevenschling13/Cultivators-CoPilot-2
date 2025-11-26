@@ -1,7 +1,7 @@
-import React, { memo, ReactNode, useMemo, ButtonHTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes, HTMLAttributes, ElementType } from 'react';
+import React, { memo, ReactNode, useMemo, ButtonHTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes, ElementType } from 'react';
 import { Haptic } from '../../utils/haptics';
 import { VpdZone } from '../../types';
-import { ChevronRight, Loader2, ChevronDown } from 'lucide-react';
+import { Loader2, ChevronDown } from 'lucide-react';
 import { palette } from '../../theme/colors';
 
 // --- NeonButton ---

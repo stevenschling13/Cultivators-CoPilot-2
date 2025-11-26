@@ -12,7 +12,6 @@ interface DashboardViewProps {
   batches: PlantBatch[];
   onBackup: () => void;
   onImport: () => void;
-  onCamera: () => void;
   onSelectBatch: (b: PlantBatch) => void;
   onAddBatch: () => void;
   onAddRoom: () => void;
@@ -21,8 +20,8 @@ interface DashboardViewProps {
 }
 
 export const DashboardView = memo(({ 
-  briefing, rooms, batches, 
-  onBackup, onImport, onCamera, onSelectBatch, onAddBatch, onAddRoom, onEditRoom 
+  briefing, rooms, batches,
+  onBackup, onImport, onSelectBatch, onAddBatch, onAddRoom, onEditRoom
 }: DashboardViewProps) => {
 
   const activeBatches = batches.filter(b => b.isActive !== false);
