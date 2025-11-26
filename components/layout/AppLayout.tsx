@@ -1,4 +1,4 @@
-import React, { ReactNode, PropsWithChildren } from 'react';
+import React, { ReactNode } from 'react';
 
 interface AppLayoutProps {
   children?: ReactNode;

@@ -10,11 +10,20 @@ View your app in AI Studio: https://ai.studio/apps/drive/1dgQMgfizygESKjiJYuf0RW
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js 20.10+ (npm 10+ recommended). Verify with `node -v` and `npm -v`. Install via [Node.js downloads](https://nodejs.org/en/download) or a version manager such as [nvm](https://github.com/nvm-sh/nvm) before continuing.
 
+1. Install dependencies: `npm install`
+2. Set API credentials in [.env.local](.env.local):
+   - `API_KEY` for the Vercel proxy at `api/proxy.js`
+   - `GEMINI_API_KEY` for local scripts (e.g., `scripts/mcp_client.js`)
+3. Run the app: `npm run dev`
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Deployment Readiness Checklist
+
+1. **Runtime available:** Node.js 20.10+ with npm 10+ is required to run lint/build steps.
+2. **Proxy present:** The Gemini proxy lives at `api/proxy.js` and expects `API_KEY` in the environment.
+3. **Install dependencies:** `npm install`
+4. **Quality gates:**
+   - Lint: `npm run lint`
+   - Build: `npm run build`
+   - Preview: `npm run preview`

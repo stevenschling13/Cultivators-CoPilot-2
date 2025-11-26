@@ -176,63 +176,70 @@ export class ImageUtils {
   public static async generateTimeLapseVideo(images: string[]): Promise<string> {
     if (images.length === 0) throw new Error("No images to generate time-lapse");
 
-    return new Promise(async (resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const size = 1080; 
-      canvas.width = size;
-      canvas.height = size;
-      
-      const ctx = canvas.getContext('2d', { alpha: false });
-      if (!ctx) return reject("No Canvas Context");
-      
-      let mimeType = 'video/webm;codecs=vp9'; 
-      if (MediaRecorder.isTypeSupported('video/mp4')) {
-        mimeType = 'video/mp4'; 
-      } else if (MediaRecorder.isTypeSupported('video/webm')) {
-        mimeType = 'video/webm';
-      }
-      
-      try {
-        const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 }); // 2.5Mbps
-        const chunks: Blob[] = [];
-        
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data);
-        };
+    return new Promise((resolve, reject) => {
+      const run = async () => {
+        const canvas = document.createElement('canvas');
+        const size = 1080;
+        canvas.width = size;
+        canvas.height = size;
 
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          resolve(url);
-        };
-
-        recorder.start();
-
-        for (const base64 of images) {
-          await new Promise<void>((r) => {
-            const img = new Image();
-            img.onload = () => {
-              ctx.fillStyle = '#000000';
-              ctx.fillRect(0, 0, size, size);
-              // Aspect Fit logic
-              const scale = Math.max(size / img.width, size / img.height);
-              const x = (size / 2) - (img.width / 2) * scale;
-              const y = (size / 2) - (img.height / 2) * scale;
-              ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-              r();
-            };
-            img.src = base64;
-          });
-          // Reduced delay for faster generation, but kept enough for stream capture
-          await new Promise(r => setTimeout(r, 100));
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) {
+          reject("No Canvas Context");
+          return;
         }
 
-        recorder.stop();
-      } catch (e) {
-        errorService.captureError(e as Error, { severity: 'MEDIUM', metadata: { context: 'TimeLapseGen' } });
-        reject(new Error(`MediaRecorder failed: ${e}`));
-      }
+        let mimeType = 'video/webm;codecs=vp9';
+        if (MediaRecorder.isTypeSupported('video/mp4')) {
+          mimeType = 'video/mp4';
+        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+          mimeType = 'video/webm';
+        }
+
+        try {
+          const stream = canvas.captureStream(30);
+          const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 }); // 2.5Mbps
+          const chunks: Blob[] = [];
+
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data);
+          };
+
+          recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            resolve(url);
+          };
+
+          recorder.start();
+
+          for (const base64 of images) {
+            await new Promise<void>((r) => {
+              const img = new Image();
+              img.onload = () => {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, size, size);
+                // Aspect Fit logic
+                const scale = Math.max(size / img.width, size / img.height);
+                const x = (size / 2) - (img.width / 2) * scale;
+                const y = (size / 2) - (img.height / 2) * scale;
+                ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                r();
+              };
+              img.src = base64;
+            });
+            // Reduced delay for faster generation, but kept enough for stream capture
+            await new Promise(r => setTimeout(r, 100));
+          }
+
+          recorder.stop();
+        } catch (e) {
+          errorService.captureError(e as Error, { severity: 'MEDIUM', metadata: { context: 'TimeLapseGen' } });
+          reject(new Error(`MediaRecorder failed: ${e}`));
+        }
+      };
+
+      run().catch(reject);
     });
   }
 }

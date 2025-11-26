@@ -1,4 +1,4 @@
-import { GrowSetup, PlantBatch, Room, AlertLevel, GrowStage } from "./types";
+import { GrowSetup, PlantBatch, Room, GrowStage } from "./types";
 
 export const AI_RESPONSE_SCHEMA = {
   healthScore: "number (0-100)",

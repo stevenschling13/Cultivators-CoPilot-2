@@ -175,8 +175,8 @@ export class HardwareService {
             device.lastReading = reading;
             this.listeners.forEach(cb => cb(device.id, reading));
             this.checkVpdSafety(reading, device.name);
-        } catch (e) {
-            // Error handling logic
+        } catch (error) {
+            console.error('Sensor emission failed', error);
         }
       });
   }

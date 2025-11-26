@@ -17,7 +17,7 @@ const isSafeUrl = (url: string | undefined): boolean => {
   try {
     const parsed = new URL(url);
     return ['http:', 'https:', 'data:'].includes(parsed.protocol);
-  } catch (e) {
+  } catch {
     return false;
   }
 };
@@ -57,7 +57,7 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                 <div className="text-sm leading-relaxed font-sans prose prose-invert prose-p:my-1 prose-headings:my-2 prose-strong:text-white prose-code:text-neon-blue prose-code:bg-white/10 prose-code:px-1 prose-code:rounded prose-code:font-mono prose-code:text-[10px] max-w-none">
                     <ReactMarkdown 
                         components={{
-                            a: ({node, ...props}) => {
+                            a: ({ ...props }) => {
                                 // Double-check href safety even inside markdown to prevent javascript: links
                                 if (!isSafeUrl(props.href as string)) {
                                     return <span className="text-gray-500 line-through" title="Unsafe Link">{props.children}</span>;
@@ -71,7 +71,7 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                                     />
                                 );
                             },
-                            img: ({node, ...props}) => {
+                            img: ({ ...props }) => {
                                 // Strict sanitization for markdown images
                                 if (!isSafeUrl(props.src as string)) {
                                     return null;
@@ -86,7 +86,7 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                                 );
                             },
                             // Add extra styling for code blocks
-                            code: ({node, ...props}) => (
+                            code: ({ ...props }) => (
                                 <code className="bg-white/10 text-neon-green px-1 py-0.5 rounded font-mono text-xs" {...props} />
                             )
                         }}
