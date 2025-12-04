@@ -18,3 +18,4 @@
 ## 🧠 CURRENT ARCHITECTURAL GOALS
 -   **Nov 2025:** Maximize Gemini 3 Pro "Thinking" capabilities for Phytopathology.
 -   **Nov 2025:** Transition large files into atomic sub-components.
+-   **Dec 2025:** Centralize environment parsing in `config/env.ts` and keep CI gates (`npm run check`) green before shipping.
