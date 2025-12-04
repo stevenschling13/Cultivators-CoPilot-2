@@ -1,6 +1,5 @@
 
-import { GeminiNetwork } from './network';
-import { GenerateContentBody, GeminiResponse, Part, Tool, Content } from './types';
+import { GoogleGenAI, GenerateContentResponse, FunctionDeclaration, Type, Part, Content } from "@google/genai";
 import { 
   Room, 
   GrowLog, 
@@ -12,11 +11,20 @@ import {
   GroundingMetadata,
   EnvironmentalTargets,
   StrainInfo,
-  CohortAnalysis
+  CohortAnalysis,
+  LogProposal
 } from '../../types';
+import { safeParseAIResponse } from './utils';
+import { 
+  FacilityBriefingSchema, 
+  ScheduleListSchema, 
+  EnvironmentalTargetsSchema, 
+  StrainInfoSchema, 
+  CohortAnalysisSchema 
+} from '../../system/schema';
 
 export class GeminiText {
-  constructor(private network: GeminiNetwork) {}
+  constructor(private ai: GoogleGenAI) {}
 
   public async chatStream(
     history: ChatMessage[], 
@@ -37,79 +45,103 @@ export class GeminiText {
       Recent Logs: ${JSON.stringify(contextData.recentLogs.map(l => ({ date: new Date(l.timestamp).toLocaleDateString(), action: l.actionType, note: l.manualNotes })))}
     `;
 
-    const contents: Content[] = [];
-    
-    // Add History
-    history.forEach(msg => {
-       const parts: Part[] = [];
-       if (msg.text) parts.push({ text: msg.text });
-       if (parts.length > 0) {
-           contents.push({ role: msg.role, parts });
+    // 1. Sanitize and Construct History for SDK
+    const validHistory: Content[] = [];
+    let lastRole = 'model'; // We expect the first message in history (if any) to be User. 
+                            // Initializing as 'model' ensures the first check expects 'user'.
+
+    for (const msg of history) {
+       // Strict Alternation Check: Prevent [User, User] or [Model, Model]
+       if (msg.role === lastRole) {
+           // Auto-heal: Insert placeholder if we have consecutive roles
+           const placeholderRole = msg.role === 'user' ? 'model' : 'user';
+           validHistory.push({ role: placeholderRole, parts: [{ text: "..." }] });
        }
-    });
 
-    // Add New Message
-    const newParts: Part[] = [];
-    if (imageContext) {
-        newParts.push({ inlineData: { mimeType: 'image/jpeg', data: imageContext.split(',')[1] || imageContext } });
+       const parts: Part[] = [];
+       
+       if (msg.text && msg.text.trim()) {
+           parts.push({ text: msg.text });
+       } else if (msg.toolCallPayload) {
+           parts.push({ text: `[System: Tool '${msg.toolCallPayload.actionType}' was proposed.]` });
+       } else {
+           parts.push({ text: "..." });
+       }
+
+       validHistory.push({ role: msg.role, parts });
+       lastRole = msg.role;
     }
-    newParts.push({ text: newMessage });
-    contents.push({ role: 'user', parts: newParts });
 
-    const tools: Tool[] = [{
-      functionDeclarations: [
-        {
-          name: "proposeLog",
-          description: "Propose a new log entry based on user intent.",
-          parameters: {
-            type: "OBJECT",
+    // Ensure history ends with Model before we append our new User message
+    if (lastRole === 'user') {
+        validHistory.push({ role: 'model', parts: [{ text: "..." }] });
+    }
+
+    // 2. Define Tools
+    const proposeLogTool: FunctionDeclaration = {
+        name: "proposeLog",
+        description: "Propose a new log entry.",
+        parameters: {
+            type: Type.OBJECT,
             properties: {
-              actionType: { type: "STRING", enum: ["Water", "Feed", "Defoliate", "Pest Control", "Training", "Observation"] },
-              manualNotes: { type: "STRING" },
-              healthScore: { type: "NUMBER" },
-              recommendations: { type: "ARRAY", items: { type: "STRING" } }
+                actionType: { type: Type.STRING, enum: ["Water", "Feed", "Defoliate", "Pest Control", "Training", "Observation"] },
+                manualNotes: { type: Type.STRING },
+                healthScore: { type: Type.NUMBER },
+                recommendations: { type: Type.ARRAY, items: { type: Type.STRING } }
             },
             required: ["actionType", "manualNotes"]
-          }
-        },
-        {
-          name: "openCamera",
-          description: "Open the camera/AR scanner for visual diagnosis.",
-          parameters: { type: "OBJECT", properties: {} }
         }
-      ]
-    } as const];
-
-    const body: GenerateContentBody = {
-      contents,
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      tools,
-      generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024
-      }
     };
 
-    const response = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
+    const openCameraTool: FunctionDeclaration = {
+        name: "openCamera",
+        description: "Open camera for diagnosis.",
+        parameters: { type: Type.OBJECT, properties: {} }
+    };
+
+    // 3. Initialize Chat Session
+    const chat = this.ai.chats.create({
+      model: 'gemini-2.5-flash',
+      history: validHistory,
+      config: {
+          systemInstruction: systemPrompt,
+          tools: [{ functionDeclarations: [proposeLogTool, openCameraTool] }],
+          temperature: 0.7,
+          thinkingConfig: { thinkingBudget: 0 } // Disable thinking for fast chat latency
+      }
+    });
+
+    // 4. Prepare New Message Parts
+    const newParts: Part[] = [];
+    if (imageContext) {
+        const base64 = imageContext.split(',')[1] || imageContext;
+        newParts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
+    }
     
-    if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-            if (part.functionCall && onToolCall) {
-                await onToolCall(part.functionCall.name, part.functionCall.args || {});
-            }
-            if (part.text) {
-                onChunk(part.text, response.candidates[0].groundingMetadata);
+    // Only add text part if it has content, or if it's the only part (to avoid empty message)
+    if (newMessage && newMessage.trim()) {
+        newParts.push({ text: newMessage });
+    } else if (newParts.length === 0) {
+        newParts.push({ text: "..." });
+    }
+
+    // 5. Send & Stream
+    // SDK expects 'message' property, not 'parts' or 'contents' for sendMessageStream
+    const resultStream = await chat.sendMessageStream({ message: newParts });
+
+    for await (const chunk of resultStream) {
+        const c = chunk as GenerateContentResponse;
+        if (c.candidates?.[0]?.content?.parts) {
+            for (const part of c.candidates[0].content.parts) {
+                if (part.functionCall && onToolCall) {
+                    await onToolCall(part.functionCall.name, part.functionCall.args as Record<string, any>);
+                }
+                if (part.text) {
+                    onChunk(part.text, c.candidates[0].groundingMetadata);
+                }
             }
         }
     }
-  }
-
-  public async sendTextQuery(text: string): Promise<string> {
-      const body: GenerateContentBody = {
-          contents: [{ parts: [{ text }] }]
-      };
-      const response = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      return response.candidates?.[0]?.content?.parts?.[0]?.text || "";
   }
 
   // --- Agentic Generators ---
@@ -117,102 +149,145 @@ export class GeminiText {
   public async generateFacilityBriefing(rooms: Room[], logs: GrowLog[]): Promise<FacilityBriefing> {
       const prompt = `
         Generate Facility Briefing in JSON.
-        Schema:
-        {
-          "status": "OPTIMAL" | "ATTENTION" | "CRITICAL",
-          "summary": "string",
-          "actionItems": [
-            { "task": "string", "dueDate": "string", "priority": "High" | "Medium" | "Low" }
-          ],
-          "weatherAlert": "string"
-        }
         Context:
         Rooms: ${JSON.stringify(rooms)}
         Recent Logs: ${JSON.stringify(logs.slice(0,3))}
       `;
 
-      const body: GenerateContentBody = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-      };
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return text ? JSON.parse(text) : { status: 'ATTENTION', summary: 'Briefing Failed', actionItems: [] };
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: { 
+              responseMimeType: 'application/json',
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      status: { type: Type.STRING, enum: ['OPTIMAL', 'ATTENTION', 'CRITICAL'] },
+                      summary: { type: Type.STRING },
+                      actionItems: { 
+                          type: Type.ARRAY, 
+                          items: {
+                              type: Type.OBJECT,
+                              properties: {
+                                  task: { type: Type.STRING },
+                                  dueDate: { type: Type.STRING },
+                                  priority: { type: Type.STRING, enum: ['High', 'Medium', 'Low'] }
+                              }
+                          }
+                      },
+                      weatherAlert: { type: Type.STRING }
+                  }
+              }
+          }
+      });
+      
+      return safeParseAIResponse(response.text, FacilityBriefingSchema, 'generateFacilityBriefing');
   }
 
   public async generateForwardSchedule(batch: PlantBatch, logs: GrowLog[]): Promise<ScheduleItem[]> {
       const prompt = `
         Create a forward schedule (Next 7 days).
         Context: Batch ${JSON.stringify(batch)}, Logs ${JSON.stringify(logs.slice(0, 5))}
-        Return JSON Array: { "task": string, "dueDate": string, "priority": "High"|"Medium"|"Low", "reasoning": string }
       `;
 
-      const body: GenerateContentBody = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-      };
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-3-pro-preview', 
+          contents: prompt,
+          config: { 
+              responseMimeType: 'application/json',
+              thinkingConfig: { thinkingBudget: 2048 },
+              responseSchema: {
+                  type: Type.ARRAY,
+                  items: {
+                      type: Type.OBJECT,
+                      properties: {
+                          task: { type: Type.STRING },
+                          dueDate: { type: Type.STRING },
+                          priority: { type: Type.STRING, enum: ['High', 'Medium', 'Low'] },
+                          reasoning: { type: Type.STRING }
+                      }
+                  }
+              }
+          }
+      });
       
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return text ? JSON.parse(text) : [];
+      return safeParseAIResponse(response.text, ScheduleListSchema, 'generateForwardSchedule');
   }
 
   public async calibrateEnvironment(strain: string, stage: string, day: number): Promise<EnvironmentalTargets> {
-      const prompt = `
-         Recommend targets for ${strain}, Stage ${stage}, Day ${day}.
-         Return JSON: { "temp": string, "rh": string, "vpd": string, "reasoning": string }
-      `;
-      const body: GenerateContentBody = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-      };
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return text ? JSON.parse(text) : { temp: "75F", rh: "50%", vpd: "1.0", reasoning: "Default fallback" };
+      const prompt = `Recommend targets for ${strain}, Stage ${stage}, Day ${day}.`;
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: { 
+              responseMimeType: 'application/json',
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      temp: { type: Type.STRING },
+                      rh: { type: Type.STRING },
+                      vpd: { type: Type.STRING },
+                      reasoning: { type: Type.STRING }
+                  }
+              }
+          }
+      });
+      return safeParseAIResponse(response.text, EnvironmentalTargetsSchema, 'calibrateEnvironment');
   }
 
   public async getStrainInfo(strainName: string): Promise<StrainInfo> {
-      const prompt = `
-         Provide Strain Info for "${strainName}".
-         Return JSON: { 
-            "breeder": string, "lineage": string, "floweringTimeDays": number, 
-            "stretchPotential": "Low"|"Medium"|"High", "terpeneProfile": string, "feedingRecommendation": "Light"|"Medium"|"Heavy"
-         }
-      `;
-      const body: GenerateContentBody = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-      };
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return text ? JSON.parse(text) : { 
-          breeder: "Unknown", lineage: "Unknown", floweringTimeDays: 60, 
-          stretchPotential: "Medium", terpeneProfile: "Unknown", feedingRecommendation: "Medium" 
-      };
+      const prompt = `Provide Strain Info for "${strainName}".`;
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: { 
+              responseMimeType: 'application/json',
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      breeder: { type: Type.STRING },
+                      lineage: { type: Type.STRING },
+                      floweringTimeDays: { type: Type.NUMBER },
+                      stretchPotential: { type: Type.STRING },
+                      terpeneProfile: { type: Type.STRING },
+                      feedingRecommendation: { type: Type.STRING }
+                  }
+              }
+          }
+      });
+      return safeParseAIResponse(response.text, StrainInfoSchema, 'getStrainInfo');
   }
 
   public async generateCohortAnalysis(logs: GrowLog[]): Promise<CohortAnalysis> {
-      const prompt = `
-         Analyze logs: ${JSON.stringify(logs.slice(0, 10))}
-         Return JSON: { "trendSummary": string, "topPerformingStrain": string, "recommendedAction": string }
-      `;
-      const body: GenerateContentBody = {
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-      };
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return text ? JSON.parse(text) : { trendSummary: "Insufficient Data", topPerformingStrain: "N/A", recommendedAction: "Collect more data" };
+      const prompt = `Analyze logs: ${JSON.stringify(logs.slice(0, 10))}`;
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-3-pro-preview',
+          contents: prompt,
+          config: { 
+              responseMimeType: 'application/json',
+              thinkingConfig: { thinkingBudget: 1024 },
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      trendSummary: { type: Type.STRING },
+                      topPerformingStrain: { type: Type.STRING },
+                      recommendedAction: { type: Type.STRING }
+                  }
+              }
+          }
+      });
+      return safeParseAIResponse(response.text, CohortAnalysisSchema, 'generateCohortAnalysis');
   }
 
   public async askResearchAnalyst(logs: GrowLog[], query: string): Promise<string> {
-      const prompt = `
-         Role: Cannabis Data Analyst. Context: ${JSON.stringify(logs.slice(0, 10))}. Query: ${query}
-      `;
-      const body: GenerateContentBody = {
-          contents: [{ parts: [{ text: prompt }] }]
-      };
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "No analysis generated.";
+      const prompt = `Role: Cannabis Data Analyst. Context: ${JSON.stringify(logs.slice(0, 10))}. Query: ${query}`;
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-3-pro-preview',
+          contents: prompt,
+          config: {
+              thinkingConfig: { thinkingBudget: 1024 }
+          }
+      });
+      return response.text || "No analysis generated.";
   }
 }

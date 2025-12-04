@@ -1,5 +1,5 @@
 
-import React, { ReactNode } from 'react';
+import React, { ReactNode, memo } from 'react';
 
 interface HeaderProps {
   title: string;
@@ -9,7 +9,7 @@ interface HeaderProps {
   className?: string;
 }
 
-export const Header = ({ title, subtitle, leftAction, rightAction, className = "" }: HeaderProps) => {
+export const Header = memo(({ title, subtitle, leftAction, rightAction, className = "" }: HeaderProps) => {
   return (
     <div className={`flex justify-between items-end mb-6 ${className}`}>
       <div className="flex items-center gap-4">
@@ -28,4 +28,6 @@ export const Header = ({ title, subtitle, leftAction, rightAction, className = "
       {rightAction}
     </div>
   );
-};
+});
+
+Header.displayName = 'Header';

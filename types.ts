@@ -88,6 +88,16 @@ export interface AiDiagnosis {
   harvestPrediction?: HarvestPrediction;
 }
 
+export interface WateringData {
+  volumeLiters: number;
+  phInput: number;
+  ecInput: number;
+  phRunoff?: number;
+  ecRunoff?: number;
+  recipeName?: string;
+  additives?: string[];
+}
+
 export interface GrowLog {
   id: string;
   plantBatchId: string;
@@ -98,6 +108,7 @@ export interface GrowLog {
   imageUrl?: string;
   videoUrl?: string;
   aiDiagnosis?: AiDiagnosis;
+  wateringData?: WateringData;
 }
 
 export interface PlantBatch {
@@ -128,14 +139,23 @@ export interface CalculatedMetrics {
   vpdStatus: VpdZone;
 }
 
+/**
+ * AR Overlay Data Contract v2.1
+ * Enhanced with engineering metrics for the Smart Vision Pipeline.
+ */
 export interface ArOverlayData {
-  status: string;
+  status: 'INITIALIZING' | 'ACQUIRING' | 'LOCKED' | 'ANALYZING' | 'WARNING' | 'OFFLINE';
   guidance?: string;
   criticalWarning?: string;
   colaCount?: number;
   biomassEstimate?: string;
   healthStatus?: string;
   stressLevel?: number;
+  
+  // Engineering Metrics (Smart Vision)
+  stability: number; // 0-100 (100 = perfectly still)
+  confidence: number; // 0-100 (AI certainty)
+  isScanning: boolean; // True if AI request is inflight
 }
 
 export interface ChatAttachment {
@@ -151,6 +171,7 @@ export interface LogProposal {
   detectedPests?: string[];
   nutrientDeficiencies?: string[];
   recommendations?: string[];
+  wateringData?: WateringData;
 }
 
 export interface ChatMessage {

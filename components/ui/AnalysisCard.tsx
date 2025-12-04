@@ -1,6 +1,7 @@
-import React from 'react';
+
+import React, { memo } from 'react';
 import { LogProposal } from '../../types';
-import { Activity, AlertTriangle, Bug, CheckCircle2, PlusCircle, Leaf } from 'lucide-react';
+import { Activity, Bug, CheckCircle2, PlusCircle, Leaf } from 'lucide-react';
 import { Haptic } from '../../utils/haptics';
 
 interface AnalysisCardProps {
@@ -8,7 +9,7 @@ interface AnalysisCardProps {
   onSave: () => void;
 }
 
-export const AnalysisCard = ({ data, onSave }: AnalysisCardProps) => {
+export const AnalysisCard = memo(({ data, onSave }: AnalysisCardProps) => {
   if (!data) return null;
 
   // Construct a pseudo-diagnosis object for consistent rendering with LogProposal flat structure
@@ -97,4 +98,5 @@ export const AnalysisCard = ({ data, onSave }: AnalysisCardProps) => {
       </div>
     </div>
   );
-};
+});
+AnalysisCard.displayName = 'AnalysisCard';

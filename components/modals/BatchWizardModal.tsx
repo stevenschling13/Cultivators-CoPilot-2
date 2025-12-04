@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, memo } from 'react';
 import { X, Sprout, Sparkles, Calendar, ArrowRight, Dna } from 'lucide-react';
 import { geminiService } from '../../services/geminiService';
 import { Haptic } from '../../utils/haptics';
@@ -11,7 +12,7 @@ interface BatchWizardModalProps {
   onBatchCreated: () => void;
 }
 
-export const BatchWizardModal = ({ onClose, onBatchCreated }: BatchWizardModalProps) => {
+export const BatchWizardModal = memo(({ onClose, onBatchCreated }: BatchWizardModalProps) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [strainName, setStrainName] = useState('');
@@ -191,4 +192,5 @@ export const BatchWizardModal = ({ onClose, onBatchCreated }: BatchWizardModalPr
       </div>
     </div>
   );
-};
+});
+BatchWizardModal.displayName = 'BatchWizardModal';

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { X, Box, Activity, Wifi, Trash2, Sparkles, Clock, Calendar } from 'lucide-react';
 import { Room, GrowStage, SensorDevice, PlantBatch, EnvironmentalTargets } from '../../types';
 import { STAGE_INFO } from '../../constants';
@@ -17,7 +17,7 @@ interface RoomEditModalProps {
   onClose: () => void;
 }
 
-export const RoomEditModal = ({ room, batches, onSave, onDelete, onClose }: RoomEditModalProps) => {
+export const RoomEditModal = memo(({ room, batches, onSave, onDelete, onClose }: RoomEditModalProps) => {
   const [name, setName] = useState(room?.name || '');
   const [stage, setStage] = useState<GrowStage>(room?.stage || GrowStage.VEG);
   const [stageDay, setStageDay] = useState(room?.stageDay || 1);
@@ -223,4 +223,5 @@ export const RoomEditModal = ({ room, batches, onSave, onDelete, onClose }: Room
       </div>
     </div>
   );
-};
+});
+RoomEditModal.displayName = 'RoomEditModal';

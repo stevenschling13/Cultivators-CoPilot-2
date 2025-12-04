@@ -1,10 +1,10 @@
 
-import React, { useState, useRef } from 'react';
-import { Trash2, FileText, Edit2 } from 'lucide-react';
+import React, { useState, useRef, memo } from 'react';
+import { Trash2, FileText } from 'lucide-react';
 import { GrowLog } from '../types';
 import { Haptic } from '../utils/haptics';
 
-export const SwipeableLogItem = ({ 
+export const SwipeableLogItem = memo(({ 
   log, 
   onDelete, 
   onClick,
@@ -115,4 +115,5 @@ export const SwipeableLogItem = ({
       </div>
     </div>
   );
-};
+});
+SwipeableLogItem.displayName = 'SwipeableLogItem';

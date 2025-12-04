@@ -36,62 +36,94 @@ module.exports = async (req, res) => {
 
   // 1. Handle Legacy Media Download (Direct URL)
   if (query.url) {
-    const authUrl = `${query.url}&key=${apiKey}`;
-    https.get(authUrl, (proxyRes) => {
-      Object.keys(proxyRes.headers).forEach(key => res.setHeader(key, proxyRes.headers[key]));
-      res.statusCode = proxyRes.statusCode;
-      proxyRes.pipe(res);
-    }).on('error', (e) => {
-      res.statusCode = 500;
-      res.end(`Proxy error: ${e.message}`);
-    });
+    try {
+        const authUrl = `${query.url}&key=${apiKey}`;
+        const proxyReq = https.get(authUrl, (proxyRes) => {
+            if (proxyRes.statusCode !== 200) {
+                 res.statusCode = proxyRes.statusCode;
+                 res.end('Upstream Error');
+                 return;
+            }
+            // Whitelist safe headers
+            const safeHeaders = ['content-type', 'content-length', 'cache-control'];
+            safeHeaders.forEach(key => {
+                if (proxyRes.headers[key]) res.setHeader(key, proxyRes.headers[key]);
+            });
+            proxyRes.pipe(res);
+        });
+        
+        proxyReq.on('error', (e) => {
+            console.error(e);
+            res.statusCode = 502;
+            res.end('Proxy Error');
+        });
+        
+        proxyReq.setTimeout(30000, () => {
+            proxyReq.destroy();
+            res.statusCode = 504;
+            res.end('Gateway Timeout');
+        });
+
+    } catch (e) {
+        res.statusCode = 500;
+        res.end(e.message);
+    }
     return;
   }
 
   // 2. Handle API Forwarding
   if (query.endpoint) {
-    // Collect Body if present
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    await new Promise(resolve => req.on('end', resolve));
+    try {
+        // Collect Body if present
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        await new Promise(resolve => req.on('end', resolve));
 
-    // Construct Upstream URL
-    // Endpoint expected format: "v1beta/models/gemini-pro:generateContent" or "v1beta/operations/..."
-    const upstreamUrl = `https://generativelanguage.googleapis.com/${query.endpoint}?key=${apiKey}`;
+        // Construct Upstream URL
+        const upstreamUrl = `https://generativelanguage.googleapis.com/${query.endpoint}?key=${apiKey}`;
 
-    const options = {
-      method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    };
+        const options = {
+            method: req.method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            timeout: 60000 // 60s timeout for AI generation
+        };
 
-    if (body) {
-        options.headers['Content-Length'] = Buffer.byteLength(body);
-    }
-
-    const proxyReq = https.request(upstreamUrl, options, (proxyRes) => {
-      // Forward status and headers
-      res.statusCode = proxyRes.statusCode;
-      Object.keys(proxyRes.headers).forEach(key => {
-        // Drop encoding to let node handle it or raw pipe
-        if (key !== 'content-encoding') {
-            res.setHeader(key, proxyRes.headers[key]);
+        if (body) {
+            options.headers['Content-Length'] = Buffer.byteLength(body);
         }
-      });
-      proxyRes.pipe(res);
-    });
 
-    proxyReq.on('error', (e) => {
-      console.error("Proxy Request Error:", e);
-      res.statusCode = 502;
-      res.end(JSON.stringify({ error: 'Upstream connection failed' }));
-    });
+        const proxyReq = https.request(upstreamUrl, options, (proxyRes) => {
+            res.statusCode = proxyRes.statusCode;
+            Object.keys(proxyRes.headers).forEach(key => {
+                if (key !== 'content-encoding') {
+                    res.setHeader(key, proxyRes.headers[key]);
+                }
+            });
+            proxyRes.pipe(res);
+        });
 
-    if (body) {
-      proxyReq.write(body);
+        proxyReq.on('error', (e) => {
+            console.error("Proxy Request Error:", e);
+            res.statusCode = 502;
+            res.end(JSON.stringify({ error: 'Upstream connection failed' }));
+        });
+
+        proxyReq.on('timeout', () => {
+            proxyReq.destroy();
+            res.statusCode = 504;
+            res.end(JSON.stringify({ error: 'Upstream timeout' }));
+        });
+
+        if (body) {
+            proxyReq.write(body);
+        }
+        proxyReq.end();
+    } catch (e) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: 'Internal Proxy Error' }));
     }
-    proxyReq.end();
     return;
   }
 

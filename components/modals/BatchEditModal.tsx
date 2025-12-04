@@ -1,7 +1,6 @@
 
-
-import React, { useState } from 'react';
-import { X, Save, Sprout, Calendar, Dna } from 'lucide-react';
+import React, { useState, memo } from 'react';
+import { X, Save, Dna, Calendar } from 'lucide-react';
 import { PlantBatch } from '../../types';
 import { Haptic } from '../../utils/haptics';
 
@@ -11,7 +10,7 @@ interface BatchEditModalProps {
   onClose: () => void;
 }
 
-export const BatchEditModal = ({ batch, onSave, onClose }: BatchEditModalProps) => {
+export const BatchEditModal = memo(({ batch, onSave, onClose }: BatchEditModalProps) => {
   const [strain, setStrain] = useState(batch.strain);
   const [breeder, setBreeder] = useState(batch.breeder || '');
   const [soilMix, setSoilMix] = useState(batch.soilMix);
@@ -111,4 +110,5 @@ export const BatchEditModal = ({ batch, onSave, onClose }: BatchEditModalProps) 
       </div>
     </div>
   );
-};
+});
+BatchEditModal.displayName = 'BatchEditModal';

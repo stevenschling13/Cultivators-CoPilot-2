@@ -1,12 +1,15 @@
 
-import { GeminiNetwork } from './network';
-import { GenerateContentBody, GeminiResponse, LiveSession } from './types';
+import { GoogleGenAI, Type } from "@google/genai";
 import { AiDiagnosis, ArOverlayData } from '../../types';
+import { safeParseAIResponse } from './utils';
+import { AiDiagnosisSchema, ArOverlaySchema } from '../../system/schema';
 
 export class GeminiVision {
-  private liveSession: LiveSession | null = null;
+  private isAnalyzing = false;
+  private latestFrame: string | null = null;
+  private processingPromise: Promise<void> | null = null;
   
-  constructor(private network: GeminiNetwork) {}
+  constructor(private ai: GoogleGenAI) {}
 
   public async startLiveAnalysis(
     videoStream: MediaStream | null, 
@@ -15,84 +18,160 @@ export class GeminiVision {
     onClose: () => void,
     onTranscript: (text: string) => void
   ): Promise<void> {
-    // In a real implementation, this would connect to a WebSocket proxy.
-    onError(new Error("Live API requires Backend WebSocket Proxy. Running in Text/Image Mode."));
+    this.isAnalyzing = true;
+    this.latestFrame = null;
+
+    // Start the analysis loop
+    this.processingPromise = this.analysisLoop(onOverlayUpdate, onError);
   }
 
   public sendLiveFrame(base64Image: string): void {
-     // No-op
-  }
-
-  public sendLiveTextQuery(text: string): void {
-     // No-op
+     // Update the latest frame buffer (clobbering old frames to ensure we analyze 'now')
+     this.latestFrame = base64Image;
   }
 
   public stopLiveAnalysis(): void {
-    if (this.liveSession) {
-        this.liveSession = null;
+    this.isAnalyzing = false;
+    this.latestFrame = null;
+  }
+
+  private async analysisLoop(
+    onUpdate: (data: ArOverlayData) => void, 
+    onError: (err: Error) => void
+  ) {
+    while (this.isAnalyzing) {
+      if (this.latestFrame) {
+        try {
+          const frame = this.latestFrame;
+          this.latestFrame = null; // Consume frame
+
+          const response = await this.ai.models.generateContent({
+            model: 'gemini-2.5-flash', // Fast model for near-real-time
+            contents: {
+              parts: [
+                { inlineData: { mimeType: 'image/jpeg', data: frame } },
+                { text: `
+                  Analyze this cannabis plant frame for an AR Heads-Up Display.
+                  Return JSON for HUD.
+                `}
+              ]
+            },
+            config: { 
+                responseMimeType: 'application/json',
+                temperature: 0.4,
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        status: { type: Type.STRING, enum: ["SCANNING", "LOCKED", "WARNING"] },
+                        guidance: { type: Type.STRING },
+                        colaCount: { type: Type.NUMBER },
+                        biomassEstimate: { type: Type.STRING, enum: ["Low", "Medium", "Heavy"] },
+                        healthStatus: { type: Type.STRING, enum: ["Healthy", "Stressed", "Critical"] },
+                        stressLevel: { type: Type.NUMBER },
+                        criticalWarning: { type: Type.STRING }
+                    }
+                }
+            }
+          });
+
+          if (!this.isAnalyzing) break;
+
+          const data = safeParseAIResponse(response.text, ArOverlaySchema, 'LiveAR');
+          
+          try {
+              onUpdate(data as ArOverlayData);
+          } catch (uiError) {
+              console.error("AR Overlay UI update failed", uiError);
+          }
+
+        } catch (e) {
+          console.warn("AR Frame Analysis Failed", e);
+          // Don't kill the loop on single frame failure, just log and continue
+        }
+      }
+
+      // Throttle: Wait 1s before checking for next frame to respect rate limits and CPU
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 
   public async analyzePlantImage(base64Image: string): Promise<AiDiagnosis> {
       const base64 = base64Image.split(',')[1] || base64Image;
-      const body: GenerateContentBody = {
-          contents: [{
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-3-pro-preview', // Use Pro for deep diagnosis
+          contents: {
               parts: [
                   { inlineData: { mimeType: 'image/jpeg', data: base64 } },
-                  { text: "Analyze pathology. Return JSON: healthScore, detectedPests[], nutrientDeficiencies[], morphologyNotes, recommendations[], progressionAnalysis." }
+                  { text: "Analyze phytopathology. Provide detailed diagnosis." }
               ]
-          }],
-          generationConfig: { responseMimeType: 'application/json' }
-      };
+          },
+          config: { 
+              responseMimeType: 'application/json',
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      healthScore: { type: Type.NUMBER },
+                      detectedPests: { type: Type.ARRAY, items: { type: Type.STRING } },
+                      nutrientDeficiencies: { type: Type.ARRAY, items: { type: Type.STRING } },
+                      morphologyNotes: { type: Type.STRING },
+                      recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
+                      progressionAnalysis: { type: Type.STRING },
+                      confidenceScore: { type: Type.NUMBER }
+                  },
+                  required: ["healthScore", "morphologyNotes", "recommendations"]
+              }
+          }
+      });
       
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      return text ? JSON.parse(text) : {
-          healthScore: 0,
-          detectedPests: [],
-          nutrientDeficiencies: [],
-          morphologyNotes: "Analysis Failed",
-          recommendations: [],
-          progressionAnalysis: "N/A"
-      } as AiDiagnosis;
+      return safeParseAIResponse(response.text, AiDiagnosisSchema, 'analyzePlantImage');
   }
 
   public async generateGrowthSimulation(startImage: string): Promise<string> {
       const base64 = startImage.split(',')[1] || startImage;
-      const body = {
-          image: { imageBytes: base64, mimeType: 'image/jpeg' },
-          config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '9:16' }
-      };
-
-      const op = await this.network.callProxy<{name: string}>(
-          'v1beta/models/veo-3.1-fast-generate-preview:generateVideos', 
-          body
-      );
-
-      let done = false;
-      let videoUri = '';
-      const pollStart = Date.now();
-
-      while (!done) {
-          if (Date.now() - pollStart > 120000) throw new Error("Video generation timeout");
-          await new Promise(r => setTimeout(r, 5000));
-          
-          const status = await this.network.callProxy<{done?: boolean, response?: any, error?: any}>(
-              `v1beta/${op.name}`, 
-              undefined, 
-              'GET'
-          );
-
-          if (status.error) throw new Error(status.error.message || "Video generation error");
-          
-          if (status.done) {
-              done = true;
-              videoUri = status.response?.generatedVideos?.[0]?.video?.uri;
+      
+      // Veo 3.1 - Client Side SDK Call
+      let operation = await this.ai.models.generateVideos({
+          model: 'veo-3.1-fast-generate-preview',
+          image: {
+              imageBytes: base64,
+              mimeType: 'image/jpeg'
+          },
+          config: {
+              numberOfVideos: 1,
+              resolution: '720p',
+              aspectRatio: '9:16'
           }
+      });
+
+      // Poll for completion
+      const pollStart = Date.now();
+      while (!operation.done) {
+          if (Date.now() - pollStart > 120000) throw new Error("Video generation timeout");
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          operation = await this.ai.operations.getVideosOperation({ operation });
       }
 
-      if (!videoUri) throw new Error("No video URI in response");
-      return this.network.downloadSecurely(videoUri);
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      if (!downloadLink) throw new Error("No video URI generated");
+
+      // Fetch the actual bytes using the API key
+      const videoRes = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+      if (!videoRes.ok) throw new Error("Failed to download video bytes");
+      
+      const blob = await videoRes.blob();
+      
+      // Convert Blob to Base64 Data URI for persistence in IndexedDB
+      return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              if (reader.result) {
+                  resolve(reader.result as string);
+              } else {
+                  reject(new Error("Failed to convert video blob to base64"));
+              }
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+      });
   }
 }

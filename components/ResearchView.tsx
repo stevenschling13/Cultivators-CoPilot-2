@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, memo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { BrainCircuit, ChevronRight, Microscope, Sparkles, Zap, Send, Terminal } from 'lucide-react';
+import { BrainCircuit, ChevronRight, Microscope, Sparkles, Send, Terminal } from 'lucide-react';
 import { GrowLog, PlantBatch, CohortAnalysis } from '../types';
 import { geminiService } from '../services/geminiService';
 import { SkeletonCard } from './ui/Primitives';
 import { Card } from './ui/Card';
 import { LogAnalysisPanel } from './research/LogAnalysisPanel';
-import { CustomTooltip } from './research/ResearchUtils';
+import { CustomTooltip, PathologyAxisTick } from './research/ResearchUtils';
 import { Haptic } from '../utils/haptics';
 
 interface ResearchViewProps {
@@ -14,7 +14,7 @@ interface ResearchViewProps {
   batches: PlantBatch[];
 }
 
-export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
+export const ResearchView = memo(({ logs, batches }: ResearchViewProps) => {
   const [analysis, setAnalysis] = useState<CohortAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedLog, setSelectedLog] = useState<GrowLog | null>(null);
@@ -241,7 +241,7 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
                            disabled={filteredLogs.length < 3}
                            className="px-6 py-3 bg-white text-black rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                        >
-                           <Zap className="w-3 h-3" />
+                           <Send className="w-3 h-3" />
                            FULL COHORT REPORT
                        </button>
                    </div>
@@ -298,4 +298,6 @@ export const ResearchView = ({ logs, batches }: ResearchViewProps) => {
       )}
     </div>
   );
-};
+});
+
+ResearchView.displayName = 'ResearchView';

@@ -1,15 +1,17 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Plus, Volume2, Database, Upload } from 'lucide-react';
-import { FacilityBriefing, Room, PlantBatch } from '../types';
+import { FacilityBriefing, Room, PlantBatch, GrowLog } from '../types';
 import { RoomTile } from './ui/RoomTile';
 import { SkeletonCard, StageProgressBar, StatusBadge } from './ui/Primitives';
 import { Card } from './ui/Card';
+import { WaterCycleWidget } from './ui/WaterCycleWidget';
 import { Haptic } from '../utils/haptics';
 
 interface DashboardViewProps {
   briefing: FacilityBriefing | null;
   rooms: Room[];
   batches: PlantBatch[];
+  logs?: GrowLog[];
   onBackup: () => void;
   onImport: () => void;
   onCamera: () => void;
@@ -18,14 +20,39 @@ interface DashboardViewProps {
   onAddRoom: () => void;
   onEditRoom: (r: Room) => void;
   onVoiceCommand: () => void;
+  onLogWater?: (batchTag: string) => void;
 }
 
 export const DashboardView = memo(({ 
-  briefing, rooms, batches, 
-  onBackup, onImport, onCamera, onSelectBatch, onAddBatch, onAddRoom, onEditRoom 
+  briefing, rooms, batches, logs = [],
+  onBackup, onImport, onCamera, onSelectBatch, onAddBatch, onAddRoom, onEditRoom, onLogWater 
 }: DashboardViewProps) => {
 
-  const activeBatches = batches.filter(b => b.isActive !== false);
+  const activeBatches = useMemo(() => 
+    batches.filter(b => b.isActive !== false), 
+  [batches]);
+
+  const { primaryBatch, drybackHours } = useMemo(() => {
+      const batch = activeBatches[0];
+      if (!batch) return { primaryBatch: null, drybackHours: 72 };
+
+      const soil = batch.soilMix.toLowerCase();
+      const isHydro = soil.includes('coco') || soil.includes('rockwool') || soil.includes('dwc') || soil.includes('hydro');
+      
+      return { 
+          primaryBatch: batch, 
+          drybackHours: isHydro ? 24 : 72 
+      };
+  }, [activeBatches]);
+
+  const lastWaterTimestamp = useMemo(() => {
+      const waterLog = logs.find(l => 
+          l.actionType === 'Water' || 
+          l.actionType === 'Feed' || 
+          l.actionType === 'Flush'
+      );
+      return waterLog ? waterLog.timestamp : 0;
+  }, [logs]);
 
   const getBriefingBorderColor = (status: string) => {
       switch (status) {
@@ -38,7 +65,6 @@ export const DashboardView = memo(({
 
   return (
     <div className="p-4 sm:p-0 animate-fade-in pb-32 space-y-8">
-        {/* Facility Briefing Card */}
         {briefing ? (
             <Card 
                 className={`!bg-[#0A0A0A] !border-l-4 ${getBriefingBorderColor(briefing.status)} shadow-2xl`} 
@@ -83,7 +109,21 @@ export const DashboardView = memo(({
             <SkeletonCard />
         )}
 
-        {/* Rooms Section */}
+        {activeBatches.length > 0 && primaryBatch && (
+            <section className="space-y-4">
+                <div className="flex justify-between items-center px-1">
+                    <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                        <span className="w-1 h-1 bg-gray-500 rounded-full"></span> Hydroponic Cycle
+                    </h2>
+                </div>
+                <WaterCycleWidget 
+                    lastWaterTimestamp={lastWaterTimestamp} 
+                    drybackHours={drybackHours}
+                    onLogWater={() => onLogWater && onLogWater(primaryBatch.batchTag)}
+                />
+            </section>
+        )}
+
         <section className="space-y-4">
             <div className="flex justify-between items-center px-1">
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
@@ -106,7 +146,6 @@ export const DashboardView = memo(({
             </div>
         </section>
 
-        {/* Active Batches Section */}
         <section className="space-y-4">
             <div className="flex justify-between items-center px-1">
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
@@ -145,7 +184,6 @@ export const DashboardView = memo(({
                     );
                 })}
 
-                {/* Quick Action Tile */}
                 <button 
                     onClick={() => { Haptic.tap(); onAddBatch(); }}
                     className="rounded-[24px] border border-dashed border-white/10 bg-[#0A0A0A] flex flex-col items-center justify-center gap-3 p-4 cursor-pointer hover:bg-white/5 hover:border-white/20 transition-all active:scale-[0.99] group min-h-[160px]"
@@ -158,7 +196,6 @@ export const DashboardView = memo(({
             </div>
         </section>
 
-        {/* Footer */}
         <div className="pt-8 pb-4 flex justify-center gap-6 opacity-40 hover:opacity-100 transition-opacity">
             <button onClick={onImport} className="flex items-center gap-2 text-[10px] font-mono text-gray-500 hover:text-white transition-colors uppercase tracking-wider">
                 <Upload className="w-3 h-3" /> Import Legacy

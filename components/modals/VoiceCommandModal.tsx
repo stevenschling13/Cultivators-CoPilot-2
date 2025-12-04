@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { Mic, X, Activity, Radio } from 'lucide-react';
 import { geminiService } from '../../services/geminiService';
 import { Haptic } from '../../utils/haptics';
@@ -9,7 +10,7 @@ interface VoiceCommandModalProps {
   onCommandProcessed: (cmd: VoiceCommandResponse) => void;
 }
 
-export const VoiceCommandModal = ({ onClose, onCommandProcessed }: VoiceCommandModalProps) => {
+export const VoiceCommandModal = memo(({ onClose, onCommandProcessed }: VoiceCommandModalProps) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState<string | null>(null);
@@ -167,4 +168,5 @@ export const VoiceCommandModal = ({ onClose, onCommandProcessed }: VoiceCommandM
        </div>
     </div>
   );
-};
+});
+VoiceCommandModal.displayName = 'VoiceCommandModal';

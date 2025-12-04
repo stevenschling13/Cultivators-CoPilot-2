@@ -1,3 +1,4 @@
+
 import React, { memo } from 'react';
 import { Bell, BellOff, Wifi, Database, ThermometerSun, Sliders, Trash2, RotateCcw, Save, CloudCog } from 'lucide-react';
 import { Haptic } from '../utils/haptics';
@@ -199,6 +200,9 @@ export const SettingsView = memo(({ setup, onUpdateSetup, onBack, onRestore, onS
        </div>
     </div>
   );
+}, (prev, next) => {
+  // Ignore function prop changes which are unstable in App.tsx
+  return prev.setup === next.setup;
 });
 
 SettingsView.displayName = 'SettingsView';

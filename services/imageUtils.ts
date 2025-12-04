@@ -1,10 +1,9 @@
-
-
 import { errorService } from './errorService';
 
 /**
  * ImageUtils: Professional Image Processing Pipeline
  * Optimized for iPhone 16 Pro 48MP Assets.
+ * V2: Uses Web Workers for non-blocking UI.
  */
 
 export interface ProcessedImage {
@@ -15,38 +14,150 @@ export interface ProcessedImage {
 }
 
 export class ImageUtils {
-  private static MAX_DIMENSION = 1600; 
-  private static THUMBNAIL_SIZE = 150;
-  private static COMPRESSION_QUALITY = 0.7; 
+  private static worker: Worker | null = null;
+  private static pendingRequests = new Map<string, { resolve: Function, reject: Function }>();
+
+  private static getWorker() {
+    if (!this.worker) {
+      try {
+        // Use native ESM Worker instantiation with Vite's URL handling.
+        // This avoids "binding name 'default' cannot be resolved" errors with ?worker imports.
+        // WRAP IN TRY/CATCH: 'new Worker' can throw SecurityError or ScriptError if CORS is strict on CDNs.
+        const workerUrl = new URL('../workers/image.worker.ts', import.meta.url);
+        this.worker = new Worker(workerUrl, { type: 'module' });
+
+        this.worker.onmessage = (e) => {
+          const { fileId, success, data, error } = e.data;
+          const request = this.pendingRequests.get(fileId);
+          if (request) {
+            if (success) request.resolve(data);
+            else request.reject(new Error(error || "Unknown worker error"));
+            this.pendingRequests.delete(fileId);
+          }
+        };
+        
+        this.worker.onerror = (e) => {
+            console.error("Worker Error", e);
+            this.worker?.terminate();
+            this.worker = null;
+            
+            // Do not report generic script errors from workers to the UI service as CRITICAL
+            // Just fallback to main thread.
+            
+            this.pendingRequests.forEach((req) => {
+                req.reject(new Error("Worker crashed during processing"));
+            });
+            this.pendingRequests.clear();
+        };
+      } catch (e) {
+        console.warn("Worker init failed (likely CORS), falling back to main thread", e);
+        // Do not report to ErrorService here to avoid loop/noise
+        this.worker = null;
+      }
+    }
+    return this.worker;
+  }
 
   /**
-   * Processes a raw file into optimized assets (Full + Thumbnail) in a single pass.
-   * Uses OffscreenCanvas if available to unblock Main Thread.
+   * Processes a raw file into optimized assets using a background thread.
    */
   public static async processImage(file: File): Promise<ProcessedImage> {
-    try {
-        const bitmap = await createImageBitmap(file);
-        const { width, height } = this.calculateDimensions(bitmap.width, bitmap.height, this.MAX_DIMENSION);
-        
-        // Use OffscreenCanvas if available for performance
-        if (typeof OffscreenCanvas !== 'undefined') {
-        try {
-            return await this.processOffscreen(bitmap, width, height);
-        } catch (e) {
-            console.warn("OffscreenCanvas failed, falling back to main thread", e);
-            errorService.addBreadcrumb('system', 'OffscreenCanvas fallback');
-        }
-        }
+    // Fallback for environments without Worker support (rare)
+    if (typeof Worker === 'undefined') {
+       return this.processMainThread(file);
+    }
 
-        return this.processMainThread(bitmap, width, height);
+    // Initial check to see if we can get a worker
+    const worker = this.getWorker();
+    
+    // If worker failed to initialize (returned null), fall back immediately
+    if (!worker) {
+        return this.processMainThread(file);
+    }
+
+    const fileId = Math.random().toString(36).substring(7);
+    
+    try {
+        return await new Promise((resolve, reject) => {
+          // 30s Timeout safeguard
+          const timeoutId = setTimeout(() => {
+              if (this.pendingRequests.has(fileId)) {
+                  this.pendingRequests.delete(fileId);
+                  reject(new Error("Image processing timed out (30s)"));
+              }
+          }, 30000);
+
+          this.pendingRequests.set(fileId, { 
+              resolve: (data: ProcessedImage) => {
+                  clearTimeout(timeoutId);
+                  resolve(data);
+              }, 
+              reject: (err: Error) => {
+                  clearTimeout(timeoutId);
+                  reject(err);
+              } 
+          });
+          
+          worker.postMessage({ fileId, file });
+        });
     } catch (e) {
-        errorService.captureError(e as Error, { severity: 'HIGH', metadata: { context: 'ImageProcessing', fileSize: file.size } });
-        throw e;
+        console.warn("Worker processing failed, falling back to main thread", e);
+        return this.processMainThread(file);
     }
   }
 
   /**
-   * Legacy method kept for compatibility, redirects to new pipeline.
+   * Main Thread Fallback (Legacy Logic)
+   */
+  private static async processMainThread(file: File): Promise<ProcessedImage> {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const MAX_DIMENSION = 1600;
+      const THUMBNAIL_SIZE = 150;
+      
+      let { width, height } = { width: bitmap.width, height: bitmap.height };
+      if (width > height && width > MAX_DIMENSION) {
+         height *= MAX_DIMENSION / width;
+         width = MAX_DIMENSION;
+      } else if (height > MAX_DIMENSION) {
+         width *= MAX_DIMENSION / height;
+         height = MAX_DIMENSION;
+      }
+      width = Math.round(width);
+      height = Math.round(height);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (!ctx) throw new Error("Canvas Context Failed");
+
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const full = canvas.toDataURL('image/webp', 0.7);
+
+      // Thumbnail
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = THUMBNAIL_SIZE;
+      thumbCanvas.height = THUMBNAIL_SIZE;
+      const thumbCtx = thumbCanvas.getContext('2d', { alpha: false });
+      if (!thumbCtx) throw new Error("Canvas Context Failed");
+
+      const minDim = Math.min(bitmap.width, bitmap.height);
+      const sx = (bitmap.width - minDim) / 2;
+      const sy = (bitmap.height - minDim) / 2;
+      thumbCtx.drawImage(bitmap, sx, sy, minDim, minDim, 0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+      const thumbnail = thumbCanvas.toDataURL('image/webp', 0.5);
+
+      bitmap.close();
+      return { full, thumbnail, width, height };
+    } catch (e) {
+      errorService.captureError(e as Error, { severity: 'HIGH', metadata: { context: 'ImageProcessingFallback' } });
+      throw e;
+    }
+  }
+
+  /**
+   * Legacy method kept for compatibility.
    */
   public static async compressImage(file: File): Promise<string> {
     const result = await this.processImage(file);
@@ -54,185 +165,28 @@ export class ImageUtils {
   }
 
   /**
-   * Legacy thumbnail method. 
-   * Optimization: Avoid using this if you have the original File. Use processImage instead.
+   * Legacy thumbnail method.
    */
   public static async createThumbnail(base64Image: string): Promise<string> {
+    // Quick main-thread crop for existing base64 strings
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = this.THUMBNAIL_SIZE;
-        canvas.height = this.THUMBNAIL_SIZE;
-        const ctx = canvas.getContext('2d', { alpha: false }); // Optimization: No alpha needed
+        canvas.width = 150;
+        canvas.height = 150;
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return reject();
-
-        this.drawCenterCrop(ctx, img, img.width, img.height, this.THUMBNAIL_SIZE);
+        
+        const minDim = Math.min(img.width, img.height);
+        const sx = (img.width - minDim) / 2;
+        const sy = (img.height - minDim) / 2;
+        
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 150, 150);
         resolve(canvas.toDataURL('image/webp', 0.5));
       };
-      img.onerror = (e) => {
-         errorService.captureError(new Error("Thumbnail Generation Failed"), { severity: 'LOW' });
-         reject(e);
-      };
+      img.onerror = reject;
       img.src = base64Image;
-    });
-  }
-
-  // --- Internal Helpers ---
-
-  private static calculateDimensions(w: number, h: number, max: number) {
-    let width = w;
-    let height = h;
-
-    if (width > height) {
-      if (width > max) {
-        height *= max / width;
-        width = max;
-      }
-    } else {
-      if (height > max) {
-        width *= max / height;
-        height = max;
-      }
-    }
-    return { width: Math.round(width), height: Math.round(height) };
-  }
-
-  private static async processOffscreen(bitmap: ImageBitmap, w: number, h: number): Promise<ProcessedImage> {
-    // 1. Full Res
-    const canvas = new OffscreenCanvas(w, h);
-    const ctx = canvas.getContext('2d', { alpha: false }) as OffscreenCanvasRenderingContext2D;
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    const fullBlob = await canvas.convertToBlob({ type: 'image/webp', quality: this.COMPRESSION_QUALITY });
-    
-    // 2. Thumbnail
-    const thumbCanvas = new OffscreenCanvas(this.THUMBNAIL_SIZE, this.THUMBNAIL_SIZE);
-    const thumbCtx = thumbCanvas.getContext('2d', { alpha: false }) as OffscreenCanvasRenderingContext2D;
-    this.drawCenterCrop(thumbCtx, bitmap, w, h, this.THUMBNAIL_SIZE); // Use bitmap directly, scaled implicitly? No, use bitmap dims
-    // Note: drawCenterCrop expects an image-like object. CanvasRenderingContext2D overload works for bitmap.
-    
-    const thumbBlob = await thumbCanvas.convertToBlob({ type: 'image/webp', quality: 0.5 });
-    
-    bitmap.close(); // Important: Release memory
-
-    return {
-      full: await this.blobToBase64(fullBlob),
-      thumbnail: await this.blobToBase64(thumbBlob),
-      width: w,
-      height: h
-    };
-  }
-
-  private static async processMainThread(bitmap: ImageBitmap, w: number, h: number): Promise<ProcessedImage> {
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
-    if (!ctx) throw new Error("Canvas Context Failed");
-
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    const full = canvas.toDataURL('image/webp', this.COMPRESSION_QUALITY);
-
-    // Thumbnail
-    canvas.width = this.THUMBNAIL_SIZE;
-    canvas.height = this.THUMBNAIL_SIZE;
-    // Context is lost on resize? No, strictly cleared.
-    // But standard practice is separate canvas or re-get context. 
-    // Reusing variable is fine, but context attributes persist.
-    
-    this.drawCenterCrop(ctx, bitmap, bitmap.width, bitmap.height, this.THUMBNAIL_SIZE);
-    const thumbnail = canvas.toDataURL('image/webp', 0.5);
-
-    bitmap.close();
-
-    return { full, thumbnail, width: w, height: h };
-  }
-
-  private static drawCenterCrop(
-    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, 
-    img: CanvasImageSource, 
-    srcW: number, 
-    srcH: number, 
-    destSize: number
-  ) {
-    const minDim = Math.min(srcW, srcH);
-    const sx = (srcW - minDim) / 2;
-    const sy = (srcH - minDim) / 2;
-    ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, destSize, destSize);
-  }
-
-  private static blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  /**
-   * Generates a stabilized Time-Lapse video from a sequence of Base64 images.
-   * Optimized to use requestAnimationFrame logic (simulated via delay) to prevent freezing.
-   */
-  public static async generateTimeLapseVideo(images: string[]): Promise<string> {
-    if (images.length === 0) throw new Error("No images to generate time-lapse");
-
-    return new Promise(async (resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const size = 1080; 
-      canvas.width = size;
-      canvas.height = size;
-      
-      const ctx = canvas.getContext('2d', { alpha: false });
-      if (!ctx) return reject("No Canvas Context");
-      
-      let mimeType = 'video/webm;codecs=vp9'; 
-      if (MediaRecorder.isTypeSupported('video/mp4')) {
-        mimeType = 'video/mp4'; 
-      } else if (MediaRecorder.isTypeSupported('video/webm')) {
-        mimeType = 'video/webm';
-      }
-      
-      try {
-        const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 }); // 2.5Mbps
-        const chunks: Blob[] = [];
-        
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data);
-        };
-
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: mimeType });
-          const url = URL.createObjectURL(blob);
-          resolve(url);
-        };
-
-        recorder.start();
-
-        for (const base64 of images) {
-          await new Promise<void>((r) => {
-            const img = new Image();
-            img.onload = () => {
-              ctx.fillStyle = '#000000';
-              ctx.fillRect(0, 0, size, size);
-              // Aspect Fit logic
-              const scale = Math.max(size / img.width, size / img.height);
-              const x = (size / 2) - (img.width / 2) * scale;
-              const y = (size / 2) - (img.height / 2) * scale;
-              ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-              r();
-            };
-            img.src = base64;
-          });
-          // Reduced delay for faster generation, but kept enough for stream capture
-          await new Promise(r => setTimeout(r, 100));
-        }
-
-        recorder.stop();
-      } catch (e) {
-        errorService.captureError(e as Error, { severity: 'MEDIUM', metadata: { context: 'TimeLapseGen' } });
-        reject(new Error(`MediaRecorder failed: ${e}`));
-      }
     });
   }
 }

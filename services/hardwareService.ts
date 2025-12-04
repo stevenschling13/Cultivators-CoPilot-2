@@ -1,5 +1,4 @@
 
-
 import { SensorDevice, EnvironmentReading, VpdZone } from '../types';
 import { EnvironmentService } from './environmentService';
 import { errorService } from './errorService';
@@ -42,11 +41,8 @@ export class HardwareService {
    */
   public async scanForDevices(): Promise<SensorDevice[]> {
     errorService.addBreadcrumb('system', 'Scanning for Devices (BLE + Cloud)');
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(this.mockDevices);
-      }, 500); // Fast scan for UX
-    });
+    // Return immediately to avoid UI blocking
+    return this.mockDevices;
   }
 
   /**
@@ -173,10 +169,20 @@ export class HardwareService {
             };
 
             device.lastReading = reading;
-            this.listeners.forEach(cb => cb(device.id, reading));
+            
+            // Safe broadcast
+            this.listeners.forEach(cb => {
+                try {
+                    cb(device.id, reading);
+                } catch (e) {
+                    console.warn(`Hardware listener failed for ${device.id}`, e);
+                }
+            });
+            
             this.checkVpdSafety(reading, device.name);
         } catch (e) {
             // Error handling logic
+            console.error("Error emitting reading for device", device.id, e);
         }
       });
   }

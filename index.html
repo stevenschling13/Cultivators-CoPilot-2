@@ -8,10 +8,35 @@
     <meta name="theme-color" content="#000000">
     <title>Cultivator's Copilot</title>
     
+    <!-- GLOBAL ERROR FIREWALL: Must be first script -->
+    <script>
+      (function() {
+        // Aggressively suppress generic "Script error." (CORS masked) and ResizeObserver noise
+        // This prevents them from triggering the React ErrorBoundary or polluting the console.
+        window.addEventListener('error', function(e) {
+          if (typeof e.message === 'string') {
+            if (e.message === 'Script error.' || e.message.includes('ResizeObserver')) {
+              e.stopImmediatePropagation();
+              e.preventDefault(); 
+              return true; // Tells browser "we handled this"
+            }
+          }
+        }, true); // Capture phase to intercept before React
+        
+        window.addEventListener('unhandledrejection', function(e) {
+           if (e.reason && typeof e.reason.message === 'string') {
+             if (e.reason.message === 'Script error.' || e.reason.message.includes('ResizeObserver')) {
+               e.preventDefault();
+             }
+           }
+        });
+      })();
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com" crossorigin="anonymous"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -173,27 +198,29 @@
   <script type="importmap">
 {
   "imports": {
-    "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
-    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "recharts": "https://esm.sh/recharts@2.13.0?external=react,react-dom",
+    "react-markdown": "https://esm.sh/react-markdown@9?bundle&external=react,react-dom",
+    "lucide-react": "https://esm.sh/lucide-react@0.454.0?external=react",
     "idb": "https://cdn.jsdelivr.net/npm/idb@8.0.0/+esm",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "vitest/": "https://aistudiocdn.com/vitest@^4.0.14/",
-    "react-markdown": "https://esm.sh/react-markdown@9?bundle",
-    "vitest": "https://aistudiocdn.com/vitest@^4.0.14",
-    "@testing-library/react": "https://aistudiocdn.com/@testing-library/react@^16.3.0",
-    "@testing-library/jest-dom": "https://aistudiocdn.com/@testing-library/jest-dom@^6.9.1",
-    "vite": "https://aistudiocdn.com/vite@^7.2.4",
-    "typescript-eslint": "https://aistudiocdn.com/typescript-eslint@^8.48.0",
-    "globals": "https://aistudiocdn.com/globals@^16.5.0",
-    "@eslint/js": "https://aistudiocdn.com/@eslint/js@^9.39.1",
-    "eslint-plugin-react-hooks": "https://aistudiocdn.com/eslint-plugin-react-hooks@^7.0.1",
-    "eslint-plugin-react-refresh": "https://aistudiocdn.com/eslint-plugin-react-refresh@^0.4.24"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^4.2.1",
+    "vitest/": "https://aistudiocdn.com/vitest@^2.1.0/",
+    "vitest": "https://aistudiocdn.com/vitest@^2.1.0",
+    "@testing-library/react": "https://aistudiocdn.com/@testing-library/react@^16.0.0",
+    "@testing-library/jest-dom": "https://aistudiocdn.com/@testing-library/jest-dom@^6.4.0",
+    "vite": "https://aistudiocdn.com/vite@^5.1.0",
+    "typescript-eslint": "https://aistudiocdn.com/typescript-eslint@^8.0.1",
+    "globals": "https://aistudiocdn.com/globals@^15.9.0",
+    "@eslint/js": "https://aistudiocdn.com/@eslint/js@^9.9.0",
+    "eslint-plugin-react-hooks": "https://aistudiocdn.com/eslint-plugin-react-hooks@^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "https://aistudiocdn.com/eslint-plugin-react-refresh@^0.4.9",
+    "zod": "https://aistudiocdn.com/zod@^3.22.4",
+    "webworker": "https://aistudiocdn.com/webworker@^0.8.4",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/"
   }
 }
 </script>

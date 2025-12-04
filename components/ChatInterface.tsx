@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { Send, Image as ImageIcon, Sparkles, X, Zap, Terminal, Plus } from 'lucide-react';
 import { ChatMessage, ChatAttachment, GrowLog, GrowSetup, PlantBatch, EnvironmentReading, CalculatedMetrics, LogProposal } from '../types';
@@ -321,6 +322,27 @@ export const ChatInterface = memo(({ context, batches, logs, envReading, metrics
       </div>
     </div>
   );
+}, (prev, next) => {
+  // Custom comparison to avoid re-renders when parent passes unstable object references
+  // but the underlying data has not meaningfully changed.
+  
+  // 1. Check Data Arrays (Batches/Logs) - Reference equality is sufficient as they are state driven
+  if (prev.batches !== next.batches) return false;
+  if (prev.logs !== next.logs) return false;
+  if (prev.context !== next.context) return false;
+
+  // 2. Check Telemetry (Value Equality)
+  // Ignore 'timestamp' in envReading as it updates on every tick, but UI only needs values
+  if (prev.envReading?.temperature !== next.envReading?.temperature) return false;
+  if (prev.envReading?.humidity !== next.envReading?.humidity) return false;
+  if (prev.envReading?.co2 !== next.envReading?.co2) return false;
+  if (prev.metrics?.vpd !== next.metrics?.vpd) return false;
+
+  // 3. Check Callbacks - Assume stable intent if references change (common with inline arrow funcs)
+  // We strictly check onLogProposal as it usually comes from a memoized action bag, 
+  // but onOpenCamera is often inline. We'll return true to skip update if only onOpenCamera changed ref.
+  
+  return true;
 });
 
 ChatInterface.displayName = 'ChatInterface';

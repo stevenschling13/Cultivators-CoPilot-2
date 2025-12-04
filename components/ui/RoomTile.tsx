@@ -1,3 +1,4 @@
+
 import React, { memo } from 'react';
 import { Haptic } from '../../utils/haptics';
 import { Room } from '../../types';
@@ -14,7 +15,6 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
   const { metrics } = room;
   const isOffline = metrics.status === 'OFFLINE';
   
-  // Theme logic
   let borderColor = 'border-white/5';
   let accentGradient = 'from-gray-800/20 to-transparent';
   let vpdColor = 'text-white';
@@ -56,16 +56,13 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
         hover:border-white/20 hover:bg-[#111]
       `}
     >
-      {/* Click handler */}
       <div 
          className="absolute inset-0 z-0 cursor-pointer active:scale-[0.99] transition-transform"
          onClick={() => { Haptic.tap(); onClick(room); }}
       />
 
-      {/* Background Gradient */}
       <div className={`absolute inset-0 bg-gradient-to-br ${accentGradient} opacity-50 pointer-events-none transition-opacity duration-500`} />
 
-      {/* Header */}
       <div className="w-full flex justify-between items-start z-10 pointer-events-none relative mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -80,7 +77,6 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
           </div>
         </div>
         
-        {/* Controls */}
         <div className="flex items-center gap-2 pointer-events-auto">
              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full border border-white/5 backdrop-blur-md ${isOffline ? 'bg-red-500/10' : 'bg-black/40'}`}>
                 {isOffline ? (
@@ -104,10 +100,7 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
         </div>
       </div>
 
-      {/* Metrics Grid - Strict Layout */}
       <div className="grid grid-cols-12 gap-6 z-10 relative pointer-events-none h-24">
-          
-          {/* Main Metric: VPD (Col 1-7) */}
           <div className="col-span-7 flex flex-col justify-end">
               <div className="text-[10px] text-gray-500 font-mono uppercase tracking-widest mb-1 flex items-center gap-1.5">
                  <Wind className="w-3 h-3 opacity-70" /> VPD
@@ -118,17 +111,12 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
                   </div>
                   <span className="text-sm font-medium text-gray-600 font-sans transform -translate-y-2">kPa</span>
               </div>
-              
-              {/* Sparkline */}
               <div className={`h-8 w-full mt-2 ${isOffline ? 'opacity-20 grayscale' : 'opacity-60'}`}>
                   <TrendSparkline data={metrics.history} />
               </div>
           </div>
 
-          {/* Secondary Metrics (Col 8-12) */}
           <div className="col-span-5 flex flex-col justify-between pl-4 border-l border-white/5 py-1">
-              
-              {/* Temp */}
               <div>
                  <div className="flex justify-between items-end mb-1">
                     <div className="flex items-center gap-1.5 text-gray-500 text-[9px] font-mono uppercase font-bold tracking-wider">
@@ -141,7 +129,6 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
                  </div>
               </div>
 
-              {/* RH */}
               <div>
                  <div className="flex justify-between items-end mb-1">
                     <div className="flex items-center gap-1.5 text-gray-500 text-[9px] font-mono uppercase font-bold tracking-wider">
@@ -154,7 +141,6 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
                  </div>
               </div>
 
-              {/* CO2 */}
               <div className="flex justify-between items-center pt-1">
                   <div className="flex items-center gap-1.5 text-gray-500 text-[9px] font-mono uppercase font-bold tracking-wider">
                       <Activity className="w-3 h-3" /> CO2
@@ -165,5 +151,15 @@ export const RoomTile = memo(({ room, onClick, onEdit }: RoomTileProps) => {
       </div>
     </div>
   );
+}, (prev, next) => {
+  // Strict comparison to prevent re-renders of the tile unless its own data has changed
+  return prev.room.id === next.room.id &&
+         prev.room.name === next.room.name &&
+         prev.room.stage === next.room.stage &&
+         prev.room.stageDay === next.room.stageDay &&
+         prev.room.metrics.lastUpdated === next.room.metrics.lastUpdated &&
+         prev.room.metrics.status === next.room.metrics.status &&
+         prev.room.metrics.vpd === next.room.metrics.vpd &&
+         prev.room.metrics.temp === next.room.metrics.temp;
 });
 RoomTile.displayName = 'RoomTile';

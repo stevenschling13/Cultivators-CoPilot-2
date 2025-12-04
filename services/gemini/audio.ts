@@ -1,23 +1,27 @@
 
-import { GeminiNetwork } from './network';
-import { GenerateContentBody, GeminiResponse } from './types';
+import { GoogleGenAI, Modality } from "@google/genai";
 import { VoiceCommandResponse } from '../../types';
 import { VOICE_COMMAND_INSTRUCTION } from '../../constants';
+import { safeParseAIResponse } from './utils';
+import { VoiceCommandResponseSchema } from '../../system/schema';
 
 export class GeminiAudio {
-  constructor(private network: GeminiNetwork) {}
+  constructor(private ai: GoogleGenAI) {}
 
   public async generateAudioBriefing(text: string): Promise<ArrayBuffer> {
-      const body = {
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash-preview-tts',
           contents: [{ parts: [{ text }] }],
-          config: { responseModalities: ["AUDIO"] }
-      };
-      
-      const response = await this.network.callProxy<GeminiResponse>(
-          'v1beta/models/gemini-2.5-flash-preview-tts:generateContent', 
-          body
-      );
-      
+          config: {
+              responseModalities: [Modality.AUDIO],
+              speechConfig: {
+                  voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: 'Kore' }
+                  }
+              }
+          }
+      });
+
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (!base64Audio) throw new Error("No audio generated");
 
@@ -31,18 +35,24 @@ export class GeminiAudio {
   }
 
   public async processVoiceCommand(audioBlob: Blob): Promise<VoiceCommandResponse> {
-      const base64 = await this.network.blobToBase64(audioBlob);
-      const body: GenerateContentBody = {
-          contents: [{
+      // Convert Blob to Base64
+      const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+          reader.readAsDataURL(audioBlob);
+      });
+
+      const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: {
               parts: [
                   { inlineData: { mimeType: 'audio/webm', data: base64 } },
                   { text: VOICE_COMMAND_INSTRUCTION }
               ]
-          }],
-          generationConfig: { responseMimeType: 'application/json' }
-      };
-      const data = await this.network.callProxy<GeminiResponse>('v1beta/models/gemini-2.5-flash:generateContent', body);
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      return text ? JSON.parse(text) : {} as VoiceCommandResponse;
+          },
+          config: { responseMimeType: 'application/json' }
+      });
+      
+      return safeParseAIResponse(response.text, VoiceCommandResponseSchema, 'processVoiceCommand');
   }
 }

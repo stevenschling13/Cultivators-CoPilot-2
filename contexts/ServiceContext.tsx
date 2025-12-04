@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
 import { dbService } from '../services/db';
 import { geminiService } from '../services/geminiService';
 import { hardwareService } from '../services/hardwareService';

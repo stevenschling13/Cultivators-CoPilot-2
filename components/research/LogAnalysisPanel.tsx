@@ -1,4 +1,4 @@
-import React from 'react';
+import { memo } from 'react';
 import { Beaker, Microscope, X, ShieldAlert, AlertTriangle, FileText, Bug, Sprout, CheckCircle2 } from 'lucide-react';
 import { GrowLog } from '../../types';
 import { Haptic } from '../../utils/haptics';
@@ -9,7 +9,7 @@ interface LogAnalysisPanelProps {
   onClose: () => void;
 }
 
-export const LogAnalysisPanel = ({ log, onClose }: LogAnalysisPanelProps) => {
+export const LogAnalysisPanel = memo(({ log, onClose }: LogAnalysisPanelProps) => {
   const diagnosis = log.aiDiagnosis;
 
   if (!diagnosis) {
@@ -121,4 +121,5 @@ export const LogAnalysisPanel = ({ log, onClose }: LogAnalysisPanelProps) => {
        </div>
     </div>
   );
-};
+});
+LogAnalysisPanel.displayName = 'LogAnalysisPanel';
