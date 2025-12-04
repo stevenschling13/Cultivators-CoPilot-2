@@ -1,13 +1,13 @@
 
-import { GoogleGenAI } from "@google/genai";
 import { GeminiText } from './gemini/text';
 import { GeminiVision } from './gemini/vision';
 import { GeminiAudio } from './gemini/audio';
 import { errorService } from './errorService';
-import { 
-  ArOverlayData, 
-  ChatMessage, 
-  ChatContext, 
+import { GeminiNetwork, createProxyGoogleGenAI } from './gemini/network';
+import {
+  ArOverlayData,
+  ChatMessage,
+  ChatContext,
   GroundingMetadata, 
   FacilityBriefing, 
   Room, 
@@ -22,7 +22,8 @@ import {
 } from '../types';
 
 export class GeminiService {
-  private ai: GoogleGenAI;
+  private ai = createProxyGoogleGenAI();
+  private network = new GeminiNetwork();
   private vision: GeminiVision;
   private audio: GeminiAudio;
   private text: GeminiText;
@@ -34,10 +35,7 @@ export class GeminiService {
   private readonly COOL_DOWN_MS = 60000; // 1 minute pause after 5 failures
 
   constructor() {
-    // Initialize SDK directly with Environment Variable
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    this.vision = new GeminiVision(this.ai);
+    this.vision = new GeminiVision(this.ai, this.network);
     this.audio = new GeminiAudio(this.ai);
     this.text = new GeminiText(this.ai);
   }
