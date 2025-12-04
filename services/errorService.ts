@@ -42,6 +42,8 @@ class ErrorService {
         // These provide 0 value, spam logs, and are usually transient CDN glitches.
         if (msg === 'script error.' || msg.includes('resizeobserver loop')) {
             // Already handled by head script, but double checking here
+            event.preventDefault();
+            event.stopImmediatePropagation();
             return;
         }
 
