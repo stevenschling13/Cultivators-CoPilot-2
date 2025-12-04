@@ -29,7 +29,7 @@ export const AudioVisualizer = memo(({ stream, mode, className }: AudioVisualize
   useEffect(() => {
     if (!stream || mode === 'off') {
        // Suspend context to save CPU if valid
-       if (audioContextRef.current && audioContextRef.current.state === 'running') {
+       if (audioContextRef.current && (audioContextRef.current.state as string) === 'running') {
            audioContextRef.current.suspend().catch(() => {});
        }
        return;
@@ -41,14 +41,14 @@ export const AudioVisualizer = memo(({ stream, mode, className }: AudioVisualize
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             
             // Singleton management: Reuse existing context or create new if closed
-            if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+            if (!audioContextRef.current || (audioContextRef.current.state as string) === 'closed') {
                 audioContextRef.current = new AudioContextClass();
             }
             
             const ctx = audioContextRef.current;
             
             // Resume if suspended (common browser policy block)
-            if (ctx.state === 'suspended') {
+            if ((ctx.state as string) === 'suspended') {
                 await ctx.resume();
             }
 
@@ -80,12 +80,12 @@ export const AudioVisualizer = memo(({ stream, mode, className }: AudioVisualize
     // Critical: Close context on unmount to prevent Hardware Limit Exception (Max 6 contexts)
     return () => {
         const ctx = audioContextRef.current;
-        if (ctx && ctx.state !== 'closed') {
+        if (ctx && (ctx.state as string) !== 'closed') {
             // We use .close() here which is aggressive but necessary for cleaning up hardware handles on iOS
             // But we must catch potential errors if it's already closing
             try {
                 // Check state before closing
-                if (ctx.state !== 'closed') {
+                if ((ctx.state as string) !== 'closed') {
                     ctx.close().catch(() => {});
                 }
             } catch (e) { /* ignore */ }

@@ -1,4 +1,4 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RotateCcw, ChevronDown, ChevronUp, Copy, Terminal, Shield, WifiOff } from 'lucide-react';
 import { Haptic } from '../utils/haptics';
 import { errorService } from '../services/errorService';
@@ -10,45 +10,55 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState { 
   hasError: boolean; 
-  error: Error | null;
+  error: unknown; // Strict type safety
   errorInfo: ErrorInfo | null;
   showDetails: boolean;
   errorId: string | null;
   retryCount: number;
 }
 
-export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class SystemErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { 
     hasError: false, 
     error: null, 
     errorInfo: null, 
-    showDetails: false,
+    showDetails: false, 
     errorId: null,
     retryCount: 0
   };
   
-  public static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+  public static getDerivedStateFromError(error: unknown): Partial<ErrorBoundaryState> {
     return { hasError: true, error };
   }
   
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // 1. Safe Message Extraction
+  public componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
+    // Safely extract message for analysis
     let msg = 'unknown error';
     try {
-        if (error && typeof error === 'object' && 'message' in error) {
-            msg = String((error as any).message).toLowerCase();
+        if (typeof error === 'string') {
+            msg = error;
+        } else if (error && typeof error === 'object') {
+            const errObj = error as Record<string, unknown>;
+            if ('message' in errObj && typeof errObj.message === 'string') {
+                msg = errObj.message;
+            } else {
+                // Try to stringify, might fail if circular or react element
+                try {
+                    msg = JSON.stringify(error);
+                } catch (e) {
+                    msg = 'Unserializable Object';
+                }
+            }
         } else {
-            msg = String(error).toLowerCase();
+            msg = String(error);
         }
     } catch (e) {
-        msg = 'unserializable error';
+        msg = 'Unserializable Error Object';
     }
+    const lowerMsg = msg.toLowerCase();
 
-    // 2. Check for Benign/Transient Errors that don't need a UI block
-    // "Script error" usually means a CORS issue or network blip fetching a chunk
-    if (msg.includes('script error') || msg.includes('resizeobserver') || msg.includes('import') || msg.includes('loading chunk')) {
-        // Auto-Retry logic for transient script/network errors
-        // We allow 1 auto-retry before showing the UI
+    // Check for Benign/Transient Errors
+    if (lowerMsg.includes('script error') || lowerMsg.includes('resizeobserver') || lowerMsg.includes('import') || lowerMsg.includes('loading chunk')) {
         if (this.state.retryCount < 1) {
             console.log("Auto-recovering from Transient Error...", msg);
             setTimeout(() => {
@@ -61,11 +71,10 @@ export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, Err
     const errorId = generateUUID();
     this.setState({ errorInfo, errorId });
     
-    // Delegate to the flight recorder service
-    // "Script error" events are often already caught by window.onerror, 
-    // but if React catches it during render, we log it here.
-    if (!msg.includes('script error')) {
+    if (!lowerMsg.includes('script error')) {
+        // Construct a safe error object for the service
         const safeError = error instanceof Error ? error : new Error(msg);
+        
         errorService.captureError(safeError, {
             severity: 'CRITICAL',
             componentStack: errorInfo.componentStack,
@@ -80,7 +89,6 @@ export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, Err
   
   private handleSoftReset = () => {
     try { Haptic.tap(); } catch(e) {}
-    // Attempt to recover by resetting error state
     this.setState(prev => ({ 
         hasError: false, 
         error: null, 
@@ -92,7 +100,6 @@ export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, Err
 
   private handleHardReset = () => {
     try { Haptic.error(); } catch(e) {}
-    // Clear session to break crash loops
     try { sessionStorage.clear(); } catch(e) {} 
     window.location.reload();
   };
@@ -104,40 +111,46 @@ export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, Err
 
   private copyErrorDetails = () => {
       if (!this.state.error) return;
-      const text = `Incident ID: ${this.state.errorId}\nError: ${this.state.error.message}\nStack: ${this.state.error.stack}`;
+      const msg = this.getSafeErrorMessage();
+      const stack = this.state.error instanceof Error ? this.state.error.stack : '';
+      const text = `Incident ID: ${this.state.errorId}\nError: ${msg}\nStack: ${stack}`;
       navigator.clipboard.writeText(text);
       Haptic.success();
       alert("Error details copied to clipboard");
   };
+
+  private getSafeErrorMessage = (): string => {
+      const { error } = this.state;
+      if (!error) return 'Unknown Error';
+      
+      try {
+          if (typeof error === 'string') return error;
+          if (error instanceof Error) return error.message;
+          
+          // Explicitly check for React Element objects which crash the renderer if returned as part of a string concat involving objects
+          // or if they are the error itself.
+          const errObj = error as Record<string, unknown>;
+          if (typeof errObj === 'object' && errObj !== null && '$$typeof' in errObj) {
+             return 'React Element Error: Objects are not valid as a React child. (Duplicate React Version Conflict likely)';
+          }
+          
+          return JSON.stringify(error);
+      } catch (e) {
+          return 'Non-serializable Error';
+      }
+  };
   
   public render() {
     if (this.state.hasError) {
-      // Safely access error message to prevent React Error #31 (Objects are not valid as a React child)
-      let errorMessage = 'Unknown Runtime Exception';
-      let errorStack = '';
-      
-      try {
-          const errorObj = this.state.error as any;
-          if (errorObj?.message) {
-              errorMessage = errorObj.message;
-              errorStack = errorObj.stack;
-          } else if (typeof errorObj === 'string') {
-              errorMessage = errorObj;
-          } else {
-              // Fallback for objects/React Elements
-              // Using safe stringify to capture the shape of the error object
-              errorMessage = JSON.stringify(errorObj);
-          }
-      } catch (e) {
-          errorMessage = "Non-serializable Error Object";
-      }
-
-      // Check for Network/Script errors
+      const errorMessage = String(this.getSafeErrorMessage()); // Explicit string cast for safety
+      const errorStack = this.state.error instanceof Error ? this.state.error.stack : '';
       const lowerMsg = errorMessage.toLowerCase();
+      
       const isNetworkError = lowerMsg.includes('script error') || 
                              lowerMsg.includes('failed to fetch') || 
                              lowerMsg.includes('network request failed') ||
-                             lowerMsg.includes('dynamically imported module');
+                             lowerMsg.includes('dynamically imported module') ||
+                             lowerMsg.includes('import');
       
       if (isNetworkError) {
           return (
@@ -183,7 +196,7 @@ export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, Err
           
           <div className="bg-[#111] border border-white/10 rounded-2xl p-1 max-w-md w-full mb-6 text-left shadow-2xl overflow-hidden">
              <div className="bg-black/50 p-4 border-b border-white/5 flex justify-between items-start">
-                 <div>
+                 <div className="min-w-0 pr-2">
                     <div className="flex items-center gap-2 mb-1">
                         <div className="w-2 h-2 rounded-full bg-alert-red animate-pulse"></div>
                         <span className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">Exception</span>
@@ -192,7 +205,7 @@ export class SystemErrorBoundary extends React.Component<ErrorBoundaryProps, Err
                         {errorMessage}
                     </p>
                  </div>
-                 <button onClick={this.copyErrorDetails} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-gray-500 hover:text-white">
+                 <button onClick={this.copyErrorDetails} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-gray-500 hover:text-white shrink-0">
                      <Copy className="w-4 h-4" />
                  </button>
              </div>
