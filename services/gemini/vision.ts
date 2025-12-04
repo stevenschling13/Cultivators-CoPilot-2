@@ -3,13 +3,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { AiDiagnosis, ArOverlayData } from '../../types';
 import { safeParseAIResponse } from './utils';
 import { AiDiagnosisSchema, ArOverlaySchema } from '../../system/schema';
+import { GeminiNetwork } from './network';
 
 export class GeminiVision {
   private isAnalyzing = false;
   private latestFrame: string | null = null;
   private processingPromise: Promise<void> | null = null;
   
-  constructor(private ai: GoogleGenAI) {}
+  constructor(private ai: GoogleGenAI, private network: GeminiNetwork) {}
 
   public async startLiveAnalysis(
     videoStream: MediaStream | null, 
@@ -154,24 +155,10 @@ export class GeminiVision {
       const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
       if (!downloadLink) throw new Error("No video URI generated");
 
-      // Fetch the actual bytes using the API key
-      const videoRes = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-      if (!videoRes.ok) throw new Error("Failed to download video bytes");
-      
-      const blob = await videoRes.blob();
-      
-      // Convert Blob to Base64 Data URI for persistence in IndexedDB
-      return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              if (reader.result) {
-                  resolve(reader.result as string);
-              } else {
-                  reject(new Error("Failed to convert video blob to base64"));
-              }
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-      });
+      const blob = await this.network.fetchBlobViaProxy(downloadLink);
+      const base64 = await this.network.blobToBase64(blob);
+      const mimeType = blob.type || 'video/mp4';
+
+      return `data:${mimeType};base64,${base64}`;
   }
 }

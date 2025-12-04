@@ -1,3 +1,49 @@
+import { GoogleGenAI } from "@google/genai";
+
+const DEFAULT_API_BASE = "https://generativelanguage.googleapis.com";
+
+const buildProxyEndpoint = (targetUrl: string): string => {
+  const parsed = targetUrl.startsWith('http')
+    ? new URL(targetUrl)
+    : new URL(targetUrl, DEFAULT_API_BASE);
+
+  parsed.searchParams.delete('key');
+  const search = parsed.searchParams.toString();
+  const endpointPath = `${parsed.pathname.replace(/^\//, '')}${search ? `?${search}` : ''}`;
+
+  return `/api/proxy?endpoint=${encodeURIComponent(endpointPath)}`;
+};
+
+export const createProxyFetch = (): typeof fetch => {
+  const nativeFetch = globalThis.fetch;
+
+  return (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' || input instanceof URL
+      ? input.toString()
+      : input.url;
+
+    const requestInit: RequestInit = {
+      method: init?.method ?? (input instanceof Request ? input.method : 'GET'),
+      headers: init?.headers ?? (input instanceof Request ? input.headers : undefined),
+      body: init?.body ?? (input instanceof Request ? input.body : undefined),
+      cache: init?.cache ?? (input instanceof Request ? input.cache : undefined),
+      credentials: init?.credentials ?? (input instanceof Request ? input.credentials : undefined),
+      integrity: init?.integrity ?? (input instanceof Request ? input.integrity : undefined),
+      keepalive: init?.keepalive ?? (input instanceof Request ? input.keepalive : undefined),
+      mode: init?.mode ?? (input instanceof Request ? input.mode : undefined),
+      redirect: init?.redirect ?? (input instanceof Request ? input.redirect : undefined),
+      referrer: init?.referrer ?? (input instanceof Request ? input.referrer : undefined),
+      referrerPolicy: init?.referrerPolicy ?? (input instanceof Request ? input.referrerPolicy : undefined),
+      signal: init?.signal ?? (input instanceof Request ? input.signal : undefined)
+    };
+
+    return nativeFetch(buildProxyEndpoint(url), requestInit);
+  };
+};
+
+export const createProxyGoogleGenAI = (): GoogleGenAI =>
+  new GoogleGenAI({ apiKey: 'proxy', baseUrl: DEFAULT_API_BASE, fetch: createProxyFetch() });
+
 export class GeminiNetwork {
   /**
    * Helper to call the secure proxy
@@ -21,19 +67,23 @@ export class GeminiNetwork {
     return response.json() as Promise<T>;
   }
 
-  /**
-   * Securely downloads media by proxying the request.
-   */
-  public async downloadSecurely(uri: string): Promise<string> {
+  public async fetchBlobViaProxy(uri: string): Promise<Blob> {
     try {
       const response = await fetch(`/api/proxy?url=${encodeURIComponent(uri)}`);
       if (!response.ok) throw new Error("Secure download failed");
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
+      return response.blob();
     } catch (e) {
       console.error("Secure download error", e);
       throw e;
     }
+  }
+
+  /**
+   * Securely downloads media by proxying the request.
+   */
+  public async downloadSecurely(uri: string): Promise<string> {
+    const blob = await this.fetchBlobViaProxy(uri);
+    return URL.createObjectURL(blob);
   }
 
   // --- Utilities ---

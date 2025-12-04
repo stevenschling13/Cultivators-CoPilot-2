@@ -7,6 +7,7 @@
 2.  **Images:** Always process images via `ImageUtils` (OffscreenCanvas) before storing in IndexedDB to prevent quota limits.
 3.  **State:** Use `useCallback` for all event handlers passed to children to prevent wasted re-renders.
 4.  **Gemini API:** Always use `process.env.API_KEY` injected via the build system. Never request user input for keys in UI.
+5.  **Gemini Proxy:** Instantiate Gemini clients with the `/api/proxy` fetch adapter so the API key remains server-side; never embed the key in client bundles or query strings.
 5.  **Styling:** Use `safe-area-top` and `safe-area-bottom` utilities for iOS 16+ compatibility.
 
 ## 🔴 ANTI-PATTERNS (DO NOT DO THIS)
