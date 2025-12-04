@@ -1,5 +1,6 @@
 
-import React, { memo } from 'react';
+import DOMPurify from 'dompurify';
+import React, { memo, useMemo } from 'react';
 import { Terminal, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { ChatMessage, LogProposal } from '../../types';
@@ -24,7 +25,12 @@ const isSafeUrl = (url: string | undefined): boolean => {
 
 export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
   const isUser = msg.role === 'user';
-  
+
+  const sanitizedContent = useMemo(
+    () => DOMPurify.sanitize(msg.text, { USE_PROFILES: { html: true } }),
+    [msg.text]
+  );
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 animate-slide-up group`}>
        <div className={`max-w-[85%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
@@ -53,9 +59,9 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                    <Terminal className="w-3 h-3" />
                    <span>ANALYZING BIO-METRICS...</span>
                 </div>
-             ) : (
+                    ) : (
                 <div className="text-sm leading-relaxed font-sans prose prose-invert prose-p:my-1 prose-headings:my-2 prose-strong:text-white prose-code:text-neon-blue prose-code:bg-white/10 prose-code:px-1 prose-code:rounded prose-code:font-mono prose-code:text-[10px] max-w-none">
-                    <ReactMarkdown 
+                    <ReactMarkdown
                         components={{
                             a: ({node, ...props}) => {
                                 // Double-check href safety even inside markdown to prevent javascript: links
@@ -91,7 +97,7 @@ export const MessageBubble = memo(({ msg, onLogSave }: MessageBubbleProps) => {
                             )
                         }}
                     >
-                        {msg.text}
+                        {sanitizedContent}
                     </ReactMarkdown>
                 </div>
              )}
