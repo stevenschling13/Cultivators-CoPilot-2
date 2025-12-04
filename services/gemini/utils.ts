@@ -1,11 +1,18 @@
 import { z } from 'zod';
 import { errorService } from '../errorService';
 
+export const DEFAULT_AI_RESPONSE_BYTE_LIMIT = 5 * 1024 * 1024; // 5 MB
+
 /**
  * Safely parses a JSON string against a Zod schema.
  * If parsing fails, it logs to the Flight Recorder and throws a typed error.
  */
-export function safeParseAIResponse<T>(jsonString: string | undefined, schema: z.ZodType<T>, context: string): T {
+export function safeParseAIResponse<T>(
+  jsonString: string | undefined,
+  schema: z.ZodType<T>,
+  context: string,
+  options?: { maxBytes?: number }
+): T {
   if (!jsonString) {
     const err = new Error(`AI Response Empty in context: ${context}`);
     errorService.captureError(err, { severity: 'MEDIUM', metadata: { context } });
@@ -14,6 +21,17 @@ export function safeParseAIResponse<T>(jsonString: string | undefined, schema: z
 
   // Sanitize Markdown code blocks if present (Gemini sometimes adds ```json ... ```)
   const sanitized = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  const maxBytes = options?.maxBytes ?? DEFAULT_AI_RESPONSE_BYTE_LIMIT;
+  const payloadBytes = new TextEncoder().encode(sanitized).length;
+
+  if (payloadBytes > maxBytes) {
+    const err = new Error(`AI response too large in context: ${context}`);
+    errorService.captureError(err, {
+      severity: 'HIGH',
+      metadata: { context, sizeBytes: payloadBytes, maxBytes }
+    });
+    throw err;
+  }
 
   try {
     const json = JSON.parse(sanitized);
