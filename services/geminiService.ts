@@ -34,9 +34,16 @@ export class GeminiService {
   private readonly COOL_DOWN_MS = 60000; // 1 minute pause after 5 failures
 
   constructor() {
-    // Initialize SDK directly with Environment Variable
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      throw new Error(
+        "Gemini API key is missing. Set the GEMINI_API_KEY environment variable to use Gemini features."
+      );
+    }
+
+    this.ai = new GoogleGenAI({ apiKey });
+
     this.vision = new GeminiVision(this.ai);
     this.audio = new GeminiAudio(this.ai);
     this.text = new GeminiText(this.ai);

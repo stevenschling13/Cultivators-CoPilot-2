@@ -6,7 +6,7 @@
  * 1. Secure Media Downloads (GET with url param)
  * 2. API Forwarding (POST/GET with endpoint param)
  * 
- * Injects process.env.API_KEY server-side.
+ * Injects process.env.GEMINI_API_KEY server-side.
  */
 
 const https = require('https');
@@ -26,11 +26,11 @@ module.exports = async (req, res) => {
   }
 
   const { query } = url.parse(req.url, true);
-  const apiKey = process.env.API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     res.statusCode = 500;
-    res.end(JSON.stringify({ error: 'Server configuration error: API_KEY missing' }));
+    res.end(JSON.stringify({ error: 'Server configuration error: GEMINI_API_KEY missing' }));
     return;
   }
 
