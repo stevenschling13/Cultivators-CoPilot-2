@@ -155,7 +155,7 @@ export class GeminiVision {
       if (!downloadLink) throw new Error("No video URI generated");
 
       // Fetch the actual bytes using the API key
-      const videoRes = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+      const videoRes = await fetch(`${downloadLink}&key=${process.env.GEMINI_API_KEY}`);
       if (!videoRes.ok) throw new Error("Failed to download video bytes");
       
       const blob = await videoRes.blob();
